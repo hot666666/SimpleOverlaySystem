@@ -10,6 +10,6 @@ import SwiftUI
 // MARK: - Overlay EnvironmentValues
 
 extension EnvironmentValues {
-	/// Shared overlay manager that drives presentation state across the tree.
-	@Entry public var overlayManager = OverlayManager()
+  /// Shared overlay manager that drives presentation state across the tree.
+  @Entry public var overlayManager = OverlayManager()
 }

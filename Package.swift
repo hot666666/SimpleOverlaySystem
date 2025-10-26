@@ -4,26 +4,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "SimpleOverlaySystem",
-    platforms: [
-        .iOS(.v17),
-        .macOS(.v14),
-        .macCatalyst(.v17),
-        .tvOS(.v17)
-    ],
-    products: [
-        .library(
-            name: "SimpleOverlaySystem",
-            targets: ["SimpleOverlaySystem"]
-        )
-    ],
-    targets: [
-        .target(
-            name: "SimpleOverlaySystem"
-        ),
-        .testTarget(
-            name: "SimpleOverlaySystemTests",
-            dependencies: ["SimpleOverlaySystem"]
-        )
-    ]
+  name: "SimpleOverlaySystem",
+  platforms: [
+    .iOS(.v17),
+    .macOS(.v14),
+    .macCatalyst(.v17),
+    .tvOS(.v17),
+  ],
+  products: [
+    .library(
+      name: "SimpleOverlaySystem",
+      targets: ["SimpleOverlaySystem"]
+    )
+  ],
+  targets: [
+    .target(
+      name: "SimpleOverlaySystem"
+    ),
+    .testTarget(
+      name: "SimpleOverlaySystemTests",
+      dependencies: ["SimpleOverlaySystem"]
+    ),
+  ]
 )

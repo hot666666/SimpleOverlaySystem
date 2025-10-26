@@ -11,18 +11,18 @@ import SwiftUI
 
 /// Wraps content with a private `OverlayManager` and mounts the overlay host in one place.
 public struct OverlayContainer<Content: View>: View {
-	@State private var manager = OverlayManager()
-	private let content: () -> Content
+  @State private var manager = OverlayManager()
+  private let content: () -> Content
 
-	/// Creates a container that injects its own manager so descendants can read `overlayManager`.
-	public init(@ViewBuilder content: @escaping () -> Content) {
-		self.content = content
-	}
+  /// Creates a container that injects its own manager so descendants can read `overlayManager`.
+  public init(@ViewBuilder content: @escaping () -> Content) {
+    self.content = content
+  }
 
-	public var body: some View {
-		content()
-			.frame(maxWidth: .infinity, maxHeight: .infinity)
-			.modifier(OverlayHost())
-			.environment(\.overlayManager, manager)
-	}
+  public var body: some View {
+    content()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .modifier(OverlayHost())
+      .environment(\.overlayManager, manager)
+  }
 }

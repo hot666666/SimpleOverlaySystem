@@ -9,5 +9,5 @@
 
 /// Canonical coordinate-space name shared by overlay triggers and the host container.
 enum OverlaySpace {
-	static let name: String = "SimpleOverlaySystem.Space"
+  static let name: String = "SimpleOverlaySystem.Space"
 }
