@@ -1,0 +1,74 @@
+name: Pages (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to deploy (branch or tag)"
+        required: false
+        default: "main"
+      xcode:
+        description: "Xcode version"
+        required: false
+        default: "16.1"
+      target:
+        description: "DocC target"
+        required: false
+        default: "SimpleOverlaySystem"
+      hosting_base_path:
+        description: "DocC --hosting-base-path"
+        required: false
+        default: "SimpleOverlaySystem"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ github.event.inputs.xcode }}
+
+      - name: Generate DocC (static site)
+        run: |
+          swift package --disable-sandbox \
+          generate-documentation \
+          --target "${{ github.event.inputs.target }}" \
+          --output-path docs \
+          --transform-for-static-hosting \
+          --hosting-base-path "${{ github.event.inputs.hosting_base_path }}"
+
+      - name: Sanity check
+        run: |
+          ls -la docs | sed -n '1,120p'
+          test -f docs/index.html || (echo "index.html missing" && exit 1)
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
