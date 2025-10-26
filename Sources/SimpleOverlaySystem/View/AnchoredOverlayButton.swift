@@ -11,6 +11,7 @@ import SwiftUI
 
 /// A convenience control that captures its own geometry and presents an anchored overlay when tapped.
 public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
+  // Overlay manager is optional because it depends on an ancestor `OverlayContainer`.
   @Environment(\.overlayManager) private var overlay
 
   let placement: OverlayPlacement
@@ -70,6 +71,7 @@ public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
 
   /// Requests the manager to show the overlay using the last known anchor frame.
   private func presentOverlay() {
+    guard let overlay else { return }
     let id = overlay.presentAnchored(
       anchorFrame: anchorFrame,
       placement: placement,
@@ -86,14 +88,14 @@ public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
   private func updateAnchor(_ frame: CGRect) {
     anchorFrame = frame
     if let overlayID {
-      overlay.updateAnchor(for: overlayID, frame: frame)
+      overlay?.updateAnchor(for: overlayID, frame: frame)
     }
   }
 
   /// Clears anchor information when the link disappears to avoid stale geometry.
   private func clearAnchor() {
     if let overlayID {
-      overlay.updateAnchor(for: overlayID, frame: nil)
+      overlay?.updateAnchor(for: overlayID, frame: nil)
     }
     anchorFrame = nil
   }

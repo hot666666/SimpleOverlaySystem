@@ -6,7 +6,7 @@ import Testing
 @Suite("OverlayManager stack behavior")
 struct OverlayManagerTests {
   @Test("dismissTop removes only the last overlay")
-  func dismissTopRemovesLastOverlayOnly() {
+  @MainActor func dismissTopRemovesLastOverlayOnly() {
     let manager = OverlayManager()
     let firstID = manager.presentCentered { EmptyView() }
     manager.updateSize(CGSize(width: 120, height: 120), for: firstID)
@@ -26,9 +26,8 @@ struct OverlayManagerTests {
     #expect(manager.item(withID: secondID)?.size == nil)
     #expect(manager.item(withID: firstID)?.size == CGSize(width: 120, height: 120))
   }
-
   @Test("dismissAll clears stack, sizes, and anchors")
-  func dismissAllClearsStackAndCaches() {
+  @MainActor func dismissAllClearsStackAndCaches() {
     let manager = OverlayManager()
     let anchor = CGRect(x: 10, y: 10, width: 30, height: 20)
     let overlayID = manager.presentAnchored(anchorFrame: anchor, placement: .top()) {

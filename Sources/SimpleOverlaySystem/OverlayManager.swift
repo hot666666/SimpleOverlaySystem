@@ -10,6 +10,7 @@ import SwiftUI
 // MARK: - Overlay Manager
 
 /// Observable store that drives overlay presentation and dismissal for a view hierarchy.
+@MainActor
 @Observable
 public final class OverlayManager {
   /// Backing stack that preserves presentation order (last-in, first-out).

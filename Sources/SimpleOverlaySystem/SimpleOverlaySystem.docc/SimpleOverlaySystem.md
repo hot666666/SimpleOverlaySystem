@@ -1,4 +1,4 @@
-# ``SimpleOverlaySystem``
+# `SimpleOverlaySystem`
 
 Lightweight overlay presentation for SwiftUI with centered and anchored surfaces, driven by a shared environment manager.
 
@@ -18,6 +18,7 @@ struct ContentView: View {
 
   var body: some View {
     Button("Show Centered Overlay") {
+      guard let overlay else { return }
       overlay.presentCentered {
         Text("Hello Overlay")
           .padding()
@@ -32,19 +33,19 @@ struct ContentView: View {
 
 ### Essentials
 
-- ``OverlayContainer``
-- ``OverlayManager``
+- `OverlayContainer`
+- `OverlayManager`
 
 ### Presenting Overlays
 
-- ``OverlayManager/presentCentered(dismissPolicy:barrier:backdropOpacity:content:)``
-- ``OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``
-- ``OverlayPlacement``
-- ``AnchoredOverlayButton``
+- `OverlayManager/presentCentered(dismissPolicy:barrier:backdropOpacity:content:)`
+- `OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)`
+- `OverlayPlacement`
+- `AnchoredOverlayButton`
 
 ### Dismissal and Interaction
 
-- ``OverlayManager/dismissTop()``
-- ``OverlayManager/dismissAll()``
-- ``OverlayDismissPolicy``
-- ``OverlayInteractionBarrier``
+- `OverlayManager/dismissTop()`
+- `OverlayManager/dismissAll()`
+- `OverlayDismissPolicy`
+- `OverlayInteractionBarrier`

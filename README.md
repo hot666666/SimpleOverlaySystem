@@ -9,7 +9,7 @@ A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack
 - Centered overlays and anchored overlays (shown above/below a source view)
 - Flexible dismissal policies: tap outside, action only, or none
 - Background interaction barrier: block all or passthrough, with optional scrim
-- Simple environment integration via `@Environment(\.overlayManager)`
+- Simple environment integration via optional `@Environment(\.overlayManager)` (guard before use)
 - One-time host mounting with `OverlayContainer`
 
 ## Installation (Swift Package Manager)
@@ -22,7 +22,9 @@ A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack
 
 ## Quick Start
 
-Wrap your root with `OverlayContainer`. Inside your views, use `@Environment(\.overlayManager)` to present and dismiss overlays. Both centered and anchored overlays are driven by the same manager.
+Wrap your root with `OverlayContainer`. Inside your views, use `@Environment(\.overlayManager)` (an optional value) to present and dismiss overlays. Both centered and anchored overlays are driven by the same manager and you must unwrap before using it.
+
+> Swift 6 enforces that the shared manager be created on the main actor, so the environment entry defaults to `nil` until an `OverlayContainer` injects it. Unwrap (or `guard let`) the manager before calling presentation/dismissal APIs.
 
 ```swift
 import SwiftUI
@@ -40,12 +42,12 @@ struct OverlayExampleApp: App {
 }
 
 struct ContentView: View {
-    @Environment(\.overlayManager) private var overlay
+    @Environment(\.overlayManager) private var overlay: OverlayManager?
 
     var body: some View {
         VStack {
             Button("Show Centered Overlay") {
-                overlay.presentCentered {
+                overlay?.presentCentered {
                     CenterOverlayView()
                 }
             }
@@ -54,7 +56,7 @@ struct ContentView: View {
 }
 
 struct CenterOverlayView: View {
-    @Environment(\.overlayManager) private var overlay
+    @Environment(\.overlayManager) private var overlay: OverlayManager?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -86,7 +88,7 @@ struct CenterOverlayView: View {
             }
 
             Button("Dismiss") {
-                overlay.dismissAll()
+                overlay?.dismissAll()
             }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -99,13 +101,13 @@ struct CenterOverlayView: View {
 
 ### Centered overlays
 
-<img src="resource/centered.png" alt="Centered Overlay Example" width="300" height="300">
+<img src="resource/centered.png" alt="Centered Overlay Example" width="350" height="350">
 
 - Present a modal-like overlay in the center with `presentCentered`.
 - Dismiss with `overlay.dismissTop()` or `overlay.dismissAll()`.
 
 ```swift
-overlay.presentCentered(
+overlay?.presentCentered(
     dismissPolicy: .tapOutside,   // .tapOutside, .actionOnly, .none
     barrier: .blockAll            // .blockAll or .passthrough
 ) {
@@ -115,7 +117,7 @@ overlay.presentCentered(
 
 ### Anchored overlays (button-based)
 
-<img src="resource/anchored.png" alt="Anchored Overlay Example" width="300" height="300">
+<img src="resource/anchored.png" alt="Anchored Overlay Example" width="350" height="350">
 
 - `AnchoredOverlayButton` anchors the overlay above or below its own frame.
 - Horizontal alignment supports `.leading`, `.center`, `.trailing`.
@@ -140,7 +142,7 @@ AnchoredOverlayButton(
 ## API Summary
 
 - `OverlayContainer`: Owns an `OverlayManager` and mounts the host automatically
-- `@Environment(\.overlayManager)`: Access the manager anywhere in the subtree
+- `@Environment(\.overlayManager)`: Optional environment hook (unwrap before presenting)
 - `presentCentered(...)`: Show a centered overlay
 - `AnchoredOverlayButton(...)`: Show an overlay anchored to the triggering button
 - `dismissTop()`, `dismissAll()`: Remove the top-most or all overlays

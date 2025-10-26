@@ -11,6 +11,7 @@ import SwiftUI
 
 /// Captures layout information for the container view and renders every overlay on top.
 struct OverlayHost: ViewModifier {
+  // Optional because the environment entry starts out nil until the container injects.
   @Environment(\.overlayManager) private var manager
 
   func body(content: Content) -> some View {
@@ -26,10 +27,10 @@ struct OverlayHost: ViewModifier {
   @ViewBuilder
   private func overlays(proxy: GeometryProxy) -> some View {
     // Render overlays only when the manager has items to avoid extra layout work.
-    if let lastItem = manager.top {
+    if let manager, let lastItem = manager.top {
       let containerFrame = proxy.frame(in: .named(OverlaySpace.name))
       ZStack {
-        backgroundBarrier(for: lastItem)
+        backgroundBarrier(for: lastItem, manager: manager)
         ForEach(manager.stack) { item in
           let isTop = item.id == lastItem.id
           OverlayElement(
@@ -38,7 +39,7 @@ struct OverlayHost: ViewModifier {
             containerFrame: containerFrame,
             isTop: isTop
           )
-          .zIndex(zIndex(for: item))
+          .zIndex(zIndex(for: item, manager: manager))
         }
       }
     } else {
@@ -48,7 +49,7 @@ struct OverlayHost: ViewModifier {
 
   /// Draws the semantic background (tap-blocking barrier or passthrough scrim) behind overlays.
   @ViewBuilder
-  private func backgroundBarrier(for top: OverlayItem) -> some View {
+  private func backgroundBarrier(for top: OverlayItem, manager: OverlayManager) -> some View {
     switch top.barrier {
     case .blockAll:
       Rectangle()
@@ -71,7 +72,7 @@ struct OverlayHost: ViewModifier {
   }
 
   /// Ensures overlays later in the stack render above earlier entries.
-  private func zIndex(for item: OverlayItem) -> Double {
+  private func zIndex(for item: OverlayItem, manager: OverlayManager) -> Double {
     guard let index = manager.stack.firstIndex(where: { $0.id == item.id }) else { return 0 }
     return Double(index + 1)
   }
@@ -143,11 +144,11 @@ private struct OverlaySizeReader: View {
     GeometryReader { proxy in
       let size = proxy.size
       Color.clear
-        .onAppear { store.updateSize(size, for: id) }
+        .onAppear { store?.updateSize(size, for: id) }
         .onChange(of: size) { _, newSize in
-          store.updateSize(newSize, for: id)
+          store?.updateSize(newSize, for: id)
         }
-        .onDisappear { store.updateSize(nil, for: id) }
+        .onDisappear { store?.updateSize(nil, for: id) }
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)

@@ -10,6 +10,8 @@ import SwiftUI
 // MARK: - Overlay Container
 
 /// Wraps content with a private `OverlayManager` and mounts the overlay host in one place.
+/// The manager is injected into the environment as an optional to avoid creating it
+/// outside the main actor (important for Swift 6's stricter concurrency checks).
 public struct OverlayContainer<Content: View>: View {
   @State private var manager = OverlayManager()
   private let content: () -> Content
