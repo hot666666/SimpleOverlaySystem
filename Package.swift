@@ -17,6 +17,10 @@ let package = Package(
       targets: ["SimpleOverlaySystem"]
     )
   ],
+  dependencies: [
+    // DocC plugin enables `swift package generate-documentation`
+    .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.3.0")
+  ],
   targets: [
     .target(
       name: "SimpleOverlaySystem"
