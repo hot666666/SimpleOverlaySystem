@@ -99,6 +99,8 @@ struct CenterOverlayView: View {
 
 ### Centered overlays
 
+<img src="resource/centered.png" alt="Centered Overlay Example" width="300" height="300">
+
 - Present a modal-like overlay in the center with `presentCentered`.
 - Dismiss with `overlay.dismissTop()` or `overlay.dismissAll()`.
 
@@ -112,6 +114,8 @@ overlay.presentCentered(
 ```
 
 ### Anchored overlays (button-based)
+
+<img src="resource/anchored.png" alt="Anchored Overlay Example" width="300" height="300">
 
 - `AnchoredOverlayButton` anchors the overlay above or below its own frame.
 - Horizontal alignment supports `.leading`, `.center`, `.trailing`.
