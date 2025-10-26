@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Anchored Overlay Button
 
-/// Convenience view that captures its own geometry and triggers an anchored overlay when tapped.
+/// A convenience control that captures its own geometry and presents an anchored overlay when tapped.
 public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
   @Environment(\.overlayManager) private var overlay
 
@@ -23,7 +23,15 @@ public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
   @State private var overlayID: OverlayID?
   @State private var anchorFrame: CGRect?
 
-  /// Creates an anchored link with optional overrides for dismissal, interaction, and visuals.
+  /// Creates an anchored button with optional overrides for dismissal, interaction, and visuals.
+  ///
+  /// - Parameters:
+  ///   - placement: Position relative to the button (top/bottom) and horizontal alignment.
+  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
+  ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
+  ///   - label: The button label.
+  ///   - content: The overlay content to present.
   public init(
     placement: OverlayPlacement,
     dismissPolicy: OverlayDismissPolicy = .tapOutside,

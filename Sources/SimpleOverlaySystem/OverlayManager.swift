@@ -20,7 +20,14 @@ public final class OverlayManager {
   /// Convenience accessor for the visible overlay.
   var top: OverlayItem? { stack.last }
 
-  /// Presents a centered overlay and returns the generated identifier so callers can update or dismiss it.
+  /// Presents a centered overlay.
+  ///
+  /// - Parameters:
+  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
+  ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
+  ///   - content: The overlay view to render.
+  /// - Returns: The identifier of the newly presented overlay.
   @discardableResult
   public func presentCentered(
     dismissPolicy: OverlayDismissPolicy = .tapOutside,
@@ -45,6 +52,15 @@ public final class OverlayManager {
   }
 
   /// Presents an overlay relative to a captured anchor frame and placement.
+  ///
+  /// - Parameters:
+  ///   - anchorFrame: The source view's frame in the container's coordinate space.
+  ///   - placement: Whether to show above or below, and how to align horizontally.
+  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
+  ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
+  ///   - content: The overlay view to render.
+  /// - Returns: The identifier of the newly presented overlay.
   @discardableResult
   public func presentAnchored(
     anchorFrame: CGRect?,
