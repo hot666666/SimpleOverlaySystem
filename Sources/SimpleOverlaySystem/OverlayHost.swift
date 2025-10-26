@@ -9,7 +9,20 @@ import SwiftUI
 
 // MARK: - OverlayHost View Modifier
 
-/// Captures layout information for the container view and renders every overlay on top.
+/// Captures the container view’s layout and renders the overlay stack on top.
+///
+/// You typically use ``OverlayContainer`` which applies this modifier for you:
+///
+/// ```swift
+/// OverlayContainer {
+///   ContentView()
+/// }
+/// ```
+///
+/// Responsibilities:
+/// - Establish a dedicated coordinate space for overlays
+/// - Render all active overlays
+/// - Handle the background scrim (tap‑blocking or passthrough) for the top overlay
 struct OverlayHost: ViewModifier {
   // Optional because the environment entry starts out nil until the container injects.
   @Environment(\.overlayManager) private var manager
@@ -47,7 +60,11 @@ struct OverlayHost: ViewModifier {
     }
   }
 
-  /// Draws the semantic background (tap-blocking barrier or passthrough scrim) behind overlays.
+  /// Draws the background behind overlays (blocking scrim or passthrough).
+  ///
+  /// - Parameters:
+  ///   - top: The topmost overlay item in the stack.
+  ///   - manager: Manager used to forward dismissal actions.
   @ViewBuilder
   private func backgroundBarrier(for top: OverlayItem, manager: OverlayManager) -> some View {
     switch top.barrier {
@@ -71,7 +88,12 @@ struct OverlayHost: ViewModifier {
     }
   }
 
-  /// Ensures overlays later in the stack render above earlier entries.
+  /// Computes z-index so later items render above earlier ones.
+  ///
+  /// - Parameters:
+  ///   - item: The overlay to compute for.
+  ///   - manager: The manager holding the stack order.
+  /// - Returns: A z-index higher than previously added items.
   private func zIndex(for item: OverlayItem, manager: OverlayManager) -> Double {
     guard let index = manager.stack.firstIndex(where: { $0.id == item.id }) else { return 0 }
     return Double(index + 1)
@@ -80,7 +102,10 @@ struct OverlayHost: ViewModifier {
 
 // MARK: - OverlayElement
 
-/// Single overlay entry that reads its measured size and decides its position.
+/// Renders a single overlay, reads its measured size, and computes its final position.
+///
+/// Note: Accessibility and hit-testing are restricted to the top item to keep
+/// focus and interactions correct.
 private struct OverlayElement: View {
   let item: OverlayItem
   let proxy: GeometryProxy
@@ -110,7 +135,7 @@ private struct OverlayElement: View {
 
   private var isMeasured: Bool { measuredSize != nil }
 
-  /// Anchor rect in *container-local* coordinates (nil if free-floating presentation).
+  /// Anchor rect in container-local coordinates (nil for free-floating overlays).
   private var anchorRect: CGRect? {
     guard case .anchored = item.presentation,
       let anchor = item.anchorFrame
@@ -134,7 +159,10 @@ private struct OverlayElement: View {
 
 // MARK: - OverlaySizeReader
 
-/// Reports the child view's dimensions back to the manager without disrupting layout.
+/// Reports the child view’s rendered size to the manager without disrupting layout.
+///
+/// The overlay’s position depends on the real content size. This view uses
+/// `GeometryReader` to observe size changes and keeps the manager up to date.
 private struct OverlaySizeReader: View {
   @Environment(\.overlayManager) private var store
 
@@ -157,9 +185,19 @@ private struct OverlaySizeReader: View {
 
 // MARK: - OverlayLayout
 
-/// Pure helper for computing where overlays should sit within the container.
+/// Pure helper for computing final overlay positions.
+///
+/// Given the presentation style, container/content sizes, and optional anchor
+/// rect, returns the overlay’s center point. Side‑effect free and easy to test.
 private enum OverlayLayout {
-  /// Returns a final anchor point for the overlay's center.
+  /// Returns the final center position for an overlay.
+  ///
+  /// - Parameters:
+  ///   - presentation: Centered or anchored placement.
+  ///   - containerSize: Size of the container view.
+  ///   - contentSize: Rendered size of the overlay content.
+  ///   - anchorRect: Anchor rect when anchored, otherwise `nil`.
+  /// - Returns: The center point in the container’s coordinate space.
   static func position(
     presentation: OverlayPresentation,
     containerSize: CGSize,
@@ -182,7 +220,7 @@ private enum OverlayLayout {
     }
   }
 
-  /// Calculates the overlay center for anchored presentations while respecting spacing and bounds.
+  /// Computes the center for anchored overlays, respecting spacing and bounds.
   private static func anchoredPosition(
     placement: OverlayPlacement,
     anchorRect: CGRect,
@@ -219,7 +257,7 @@ private enum OverlayLayout {
     }
   }
 
-  /// Keeps the overlay horizontally aligned relative to the anchor rect.
+  /// Keeps the overlay horizontally aligned relative to the anchor.
   private static func horizontalCoordinate(
     for alignment: OverlayPlacement.HorizontalAlignment,
     anchorRect: CGRect,

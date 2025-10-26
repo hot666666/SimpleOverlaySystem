@@ -7,24 +7,27 @@ Lightweight overlay presentation for SwiftUI with centered and anchored surfaces
 SimpleOverlaySystem provides a single overlay stack for your view hierarchy. Mount the host once near the root, then present overlays from anywhere using the environment manager.
 
 ```swift
+import SwiftUI
 import SimpleOverlaySystem
-
-OverlayContainer {
-  ContentView()
-}
 
 struct ContentView: View {
   @Environment(\.overlayManager) private var overlay
 
   var body: some View {
     Button("Show Centered Overlay") {
-      guard let overlay else { return }
-      overlay.presentCentered {
+      overlay?.presentCentered {
         Text("Hello Overlay")
           .padding()
-          .background(.background, in: .rect(cornerRadius: 12))
+          .background(.background, in: .rect(cornerRadius: 18))
       }
     }
+  }
+}
+
+
+#Preview {
+  OverlayContainer {
+    ContentView()
   }
 }
 ```
