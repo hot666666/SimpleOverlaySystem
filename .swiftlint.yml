@@ -1,0 +1,16 @@
+opt_in_rules: # 기본적으로 비활성화된 규칙이라 활성화
+  - empty_count
+  - yoda_condition              # 리터럴을 좌측에 쓰는 비교 금지 (if 5 == x)
+
+disabled_rules:
+  - indentation_width           # swift-format이 처리
+  - vertical_whitespace         # swift-format이 처리
+  - opening_brace               # swift-format이 처리
+  - sorted_imports              # swift-format이 처리
+  - trailing_whitespace         # swift-format이 처리
+  - trailing_newline            # swift-format이 처리
+  - trailing_comma              # swift-format이 처리
+  - comma                       # swift-format이 처리
+  - colon                       # swift-format이 처리
+  - line_length                 # swift-format이 처리
+  - multiple_closures_with_trailing_closure  # SwiftUI에서 불편하면 끔

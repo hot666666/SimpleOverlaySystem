@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/realm/SwiftLint
+    rev: 0.59.1
+    hooks:
+      - id: swiftlint
+        args: ["--config", ".swiftlint.yml", "--fix"]
+
+  - repo: local
+    hooks:
+      - id: swift-format
+        name: swift-format
+        entry: swift format
+        language: system
+        types: [swift]
+        args: ["--in-place"]
