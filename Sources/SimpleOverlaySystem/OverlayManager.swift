@@ -34,13 +34,14 @@ public final class OverlayManager {
     dismissPolicy: OverlayDismissPolicy = .tapOutside,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
+		offset: CGPoint = .zero,
     @ViewBuilder content: @escaping () -> some View
   ) -> OverlayID {
     let id = OverlayID()
     let builder = content
     let item = OverlayItem(
       id: id,
-      presentation: .centered,
+			presentation: .centered(offset: offset),
       dismissPolicy: dismissPolicy,
       barrier: barrier,
       backdropOpacity: backdropOpacity,

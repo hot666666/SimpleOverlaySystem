@@ -86,7 +86,7 @@ public enum OverlayPlacement: Equatable {
 /// Indirectly configured through the public APIs: ``OverlayManager/presentCentered`` and
 /// ``OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``.
 enum OverlayPresentation: Equatable {
-  case centered
+	case centered(offset: CGPoint = .zero)
   case anchored(placement: OverlayPlacement)
 }
 

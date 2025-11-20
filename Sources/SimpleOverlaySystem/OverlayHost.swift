@@ -204,9 +204,12 @@ private enum OverlayLayout {
     contentSize: CGSize,
     anchorRect: CGRect?
   ) -> CGPoint {
-    switch presentation {
-    case .centered:
-      return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+		switch presentation {
+		case .centered(let offset):
+			return CGPoint(
+				x: containerSize.width / 2 + offset.x,
+				y: containerSize.height / 2 + offset.y
+			)
     case .anchored(let placement):
       guard let anchorRect else {
         return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
