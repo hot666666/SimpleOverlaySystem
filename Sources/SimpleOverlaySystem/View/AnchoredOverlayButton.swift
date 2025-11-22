@@ -15,7 +15,7 @@ public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
   @Environment(\.overlayManager) private var overlay
 
   let placement: OverlayPlacement
-  let dismissPolicy: OverlayDismissPolicy
+  let dismissPolicy: DismissPolicy
   let barrier: OverlayInteractionBarrier
   let backdropOpacity: Double
   let label: () -> Label
@@ -28,14 +28,14 @@ public struct AnchoredOverlayButton<Label: View, OverlayContent: View>: View {
   ///
   /// - Parameters:
   ///   - placement: Position relative to the button (top/bottom) and horizontal alignment.
-  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap()`.
   ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
   ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
   ///   - label: The button label.
   ///   - content: The overlay content to present.
   public init(
     placement: OverlayPlacement,
-    dismissPolicy: OverlayDismissPolicy = .tapOutside,
+    dismissPolicy: DismissPolicy = .tap,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
     @ViewBuilder label: @escaping () -> Label,

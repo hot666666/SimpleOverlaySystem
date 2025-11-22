@@ -19,20 +19,17 @@ import SwiftUI
 /// ```
 public typealias OverlayID = UUID
 
-// MARK: - Overlay Types
 
-/// Controls how (or if) an overlay can dismiss.
-///
-/// Choose whether the overlay should close on background tap, require an explicit
-/// in-overlay action (like a button), or only be dismissible programmatically.
-public enum OverlayDismissPolicy {
-  /// Tapping outside the overlay dismisses it automatically.
-  case tapOutside
-  /// Only explicit actions inside the overlay (e.g., a button) can dismiss it.
-  case actionOnly
-  /// The overlay will not dismiss until removed programmatically.
-  /// Note: provide an accessible escape path for long‑lived modals.
-  case none
+// MARK: - Dismissal Policy
+
+/// A policy that defines how an overlay can be dismissed.
+public enum DismissPolicy {
+  /// The overlay can only be dismissed programmatically (e.g., by calling ``OverlayManager/dismiss(id:)``).
+  /// It will not react to any user gestures outside of its content.
+  case programmatic
+
+  /// The overlay reacts to taps on the background scrim.
+  case tap
 }
 
 // MARK: - Overlay Interaction Barrier
@@ -86,7 +83,7 @@ public enum OverlayPlacement: Equatable {
 /// Indirectly configured through the public APIs: ``OverlayManager/presentCentered`` and
 /// ``OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``.
 enum OverlayPresentation: Equatable {
-	case centered(offset: CGPoint = .zero)
+  case centered(offset: CGPoint = .zero)
   case anchored(placement: OverlayPlacement)
 }
 
@@ -98,10 +95,44 @@ enum OverlayPresentation: Equatable {
 struct OverlayItem: Identifiable {
   let id: OverlayID
   let presentation: OverlayPresentation
-  let dismissPolicy: OverlayDismissPolicy
+  let dismissPolicy: DismissPolicy
   let barrier: OverlayInteractionBarrier
   let backdropOpacity: Double
   let content: () -> AnyView
   var anchorFrame: CGRect?
   var size: CGSize?
+}
+
+// MARK: - Preference Key
+
+/// A wrapper for dismiss handler closures that provides value semantics.
+///
+/// This struct wraps a dismiss action closure along with a unique identifier,
+/// enabling it to be used in SwiftUI's preference system which requires `Equatable` conformance.
+/// Equality is based solely on the identifier, not the closure itself.
+struct DismissHandler: Equatable, Sendable {
+  let id: UUID
+  let action: @Sendable () -> Void
+
+  static func == (lhs: DismissHandler, rhs: DismissHandler) -> Bool {
+    lhs.id == rhs.id
+  }
+}
+
+/// A preference key for collecting dismiss handlers from overlay views.
+///
+/// This preference key is used by ``View/onTapBackground(perform:)`` to bubble up custom
+/// dismiss handlers from overlay content views to ``OverlayHost``. The host collects all
+/// handlers and maintains a mapping of overlay IDs to their respective actions.
+///
+/// ## Reduction Strategy
+/// When multiple overlays are stacked, the preference values from all overlay views are
+/// merged into a single dictionary. In case of conflicts (same overlay ID), newer values
+/// replace older ones.
+struct OverlayDismissHandlerPreferenceKey: PreferenceKey {
+  static let defaultValue: [OverlayID: DismissHandler] = [:]
+
+  static func reduce(value: inout [OverlayID: DismissHandler], nextValue: () -> [OverlayID: DismissHandler]) {
+    value.merge(nextValue()) { _, new in new }
+  }
 }

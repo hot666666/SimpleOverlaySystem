@@ -21,27 +21,31 @@ public final class OverlayManager {
   /// Convenience accessor for the visible overlay.
   var top: OverlayItem? { stack.last }
 
+  /// Convenience accessor for the stack.isEmpty
+  public var isEmpty: Bool { stack.isEmpty }
+
   /// Presents a centered overlay.
   ///
   /// - Parameters:
-  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap()`.
   ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
   ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
+  ///   - offset: A custom offset from the center of the screen.
   ///   - content: The overlay view to render.
   /// - Returns: The identifier of the newly presented overlay.
   @discardableResult
   public func presentCentered(
-    dismissPolicy: OverlayDismissPolicy = .tapOutside,
+    dismissPolicy: DismissPolicy = .tap,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
-		offset: CGPoint = .zero,
+    offset: CGPoint = .zero,
     @ViewBuilder content: @escaping () -> some View
   ) -> OverlayID {
     let id = OverlayID()
     let builder = content
     let item = OverlayItem(
       id: id,
-			presentation: .centered(offset: offset),
+      presentation: .centered(offset: offset),
       dismissPolicy: dismissPolicy,
       barrier: barrier,
       backdropOpacity: backdropOpacity,
@@ -58,7 +62,7 @@ public final class OverlayManager {
   /// - Parameters:
   ///   - anchorFrame: The source view's frame in the container's coordinate space.
   ///   - placement: Whether to show above or below, and how to align horizontally.
-  ///   - dismissPolicy: How the overlay can be dismissed. Defaults to `.tapOutside`.
+  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap()`.
   ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
   ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
   ///   - content: The overlay view to render.
@@ -67,7 +71,7 @@ public final class OverlayManager {
   public func presentAnchored(
     anchorFrame: CGRect?,
     placement: OverlayPlacement,
-    dismissPolicy: OverlayDismissPolicy = .tapOutside,
+    dismissPolicy: DismissPolicy = .tap,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
     @ViewBuilder content: @escaping () -> some View
@@ -88,9 +92,15 @@ public final class OverlayManager {
     return id
   }
 
-  /// Removes only the most recently presented overlay.
+  /// Removes the most recently presented overlay.
   public func dismissTop() {
     _ = stack.popLast()
+  }
+
+  /// Removes the overlay with the specified identifier.
+  /// - Parameter id: The ``OverlayID`` of the overlay to remove.
+  public func dismiss(id: OverlayID) {
+    stack.removeAll(where: { $0.id == id })
   }
 
   /// Removes every overlay to guarantee a clean slate.

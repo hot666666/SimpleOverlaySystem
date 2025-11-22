@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-// MARK: - OverlayHost View Modifier
+// MARK: - OverlayHost
 
 /// Captures the container view’s layout and renders the overlay stack on top.
 ///
@@ -26,6 +26,8 @@ import SwiftUI
 struct OverlayHost: ViewModifier {
   // Optional because the environment entry starts out nil until the container injects.
   @Environment(\.overlayManager) private var manager
+  /// Map of overlay IDs to their custom dismiss handlers.
+  @State private var dismissHandlers: [OverlayID: DismissHandler] = [:]
 
   func body(content: Content) -> some View {
     content
@@ -35,6 +37,9 @@ struct OverlayHost: ViewModifier {
           overlays(proxy: proxy)
         }
       }
+      .onPreferenceChange(OverlayDismissHandlerPreferenceKey.self) { handlers in
+        self.dismissHandlers = handlers
+      }
   }
 
   @ViewBuilder
@@ -42,7 +47,7 @@ struct OverlayHost: ViewModifier {
     // Render overlays only when the manager has items to avoid extra layout work.
     if let manager, let lastItem = manager.top {
       let containerFrame = proxy.frame(in: .named(OverlaySpace.name))
-      ZStack {
+      ZStack(alignment: .top) {
         backgroundBarrier(for: lastItem, manager: manager)
         ForEach(manager.stack) { item in
           let isTop = item.id == lastItem.id
@@ -52,6 +57,7 @@ struct OverlayHost: ViewModifier {
             containerFrame: containerFrame,
             isTop: isTop
           )
+          .environment(\.overlayID, item.id)
           .zIndex(zIndex(for: item, manager: manager))
         }
       }
@@ -75,9 +81,7 @@ struct OverlayHost: ViewModifier {
         .contentShape(Rectangle())
         .allowsHitTesting(true)
         .onTapGesture {
-          if top.dismissPolicy == .tapOutside {
-            manager.dismissTop()
-          }
+          handleTap(for: top, manager: manager)
         }
     case .passthrough:
       Rectangle()
@@ -85,6 +89,22 @@ struct OverlayHost: ViewModifier {
         .ignoresSafeArea()
         .contentShape(Rectangle())
         .allowsHitTesting(false)
+    }
+  }
+
+  /// Handles the tap gesture on the background based on the overlay's dismiss policy.
+  private func handleTap(for item: OverlayItem, manager: OverlayManager) {
+    // Check for a custom handler from .onTapBackground
+    if let customHandler = dismissHandlers[item.id] {
+      customHandler.action()
+      return
+    }
+
+    switch item.dismissPolicy {
+    // Fallback to the static policy
+    case .tap: manager.dismissTop()
+    // Do nothing if the policy is .programmatic
+    case .programmatic: break
     }
   }
 
@@ -107,6 +127,7 @@ struct OverlayHost: ViewModifier {
 /// Note: Accessibility and hit-testing are restricted to the top item to keep
 /// focus and interactions correct.
 private struct OverlayElement: View {
+  @FocusState private var isFocused: Bool
   let item: OverlayItem
   let proxy: GeometryProxy
   let containerFrame: CGRect
@@ -122,6 +143,10 @@ private struct OverlayElement: View {
       .accessibilityAddTraits(.isModal)
       .allowsHitTesting(isTop)
       .accessibilityHidden(!isTop)
+      .focused($isFocused)
+      .onChange(of: isTop) { _, newValue in
+        if !newValue { isFocused = false }
+      }
   }
 
   // MARK: - Computed
@@ -204,12 +229,12 @@ private enum OverlayLayout {
     contentSize: CGSize,
     anchorRect: CGRect?
   ) -> CGPoint {
-		switch presentation {
-		case .centered(let offset):
-			return CGPoint(
-				x: containerSize.width / 2 + offset.x,
-				y: containerSize.height / 2 + offset.y
-			)
+    switch presentation {
+    case .centered(let offset):
+      return CGPoint(
+        x: containerSize.width / 2 + offset.x,
+        y: containerSize.height / 2 + offset.y
+      )
     case .anchored(let placement):
       guard let anchorRect else {
         return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
