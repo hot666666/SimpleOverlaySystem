@@ -50,5 +50,6 @@ struct ContentView: View {
 
 - `OverlayManager/dismissTop()`
 - `OverlayManager/dismissAll()`
+- `View/onTapBackground(perform:)`
 - `OverlayDismissPolicy`
 - `OverlayInteractionBarrier`

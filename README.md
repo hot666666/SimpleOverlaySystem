@@ -7,7 +7,8 @@ A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack
 ## Features
 
 - Centered overlays and anchored overlays (shown above/below a source view)
-- Flexible dismissal policies: tap outside, action only, or none
+- Flexible dismissal policies: tap outside or programmatic only
+- Custom background tap handlers via `.onTapBackground` modifier for conditional dismissal
 - Background interaction barrier: block all or passthrough, with optional scrim
 - Simple environment integration via optional `@Environment(\.overlayManager)` (guard before use)
 - One-time host mounting with `OverlayContainer`
@@ -139,15 +140,71 @@ AnchoredOverlayButton(
 
 `spacing` sets the vertical gap from the anchor; `alignment` keeps the overlay horizontally aligned to the button’s leading/center/trailing edge. The container clamps the final position to stay within bounds when possible.
 
+## Custom Background Tap Handlers
+
+For scenarios where you need conditional dismissal behavior (e.g., showing a confirmation dialog before dismissing), use the `.onTapBackground` modifier within your overlay view.
+
+### Using `.onTapBackground`
+
+The `.onTapBackground` modifier allows overlay views to intercept background tap gestures and provide custom handling logic based on their internal state.
+
+```swift
+struct MyOverlay: View {
+    @Environment(\.overlayManager) var manager
+    @State private var hasUnsavedChanges = false
+    
+    var body: some View {
+        VStack {
+            Toggle("Unsaved Changes", isOn: $hasUnsavedChanges)
+            // ... other content
+        }
+        .padding()
+        .background(.regularMaterial)
+        .cornerRadius(16)
+        .onTapBackground {
+            if hasUnsavedChanges {
+                // Show confirmation dialog
+                manager?.presentCentered(dismissPolicy: .programmatic) {
+                    VStack {
+                        Text("Discard unsaved changes?")
+                        HStack {
+                            Button("Discard") {
+                                manager?.dismissAll()
+                            }
+                            Button("Cancel") {
+                                manager?.dismissTop()
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(.regularMaterial)
+                    .cornerRadius(16)
+                }
+            } else {
+                manager?.dismissTop()
+            }
+        }
+    }
+}
+
+// Present the overlay with tap-to-dismiss policy
+overlay?.presentCentered(dismissPolicy: .tap) {
+    MyOverlay()
+}
+```
+
+> **Note**: The `.onTapBackground` modifier only works when the overlay's `dismissPolicy` is set to `.tap`. For `.programmatic` overlays, background taps are ignored regardless of the modifier.
+
 ## API Summary
 
 - `OverlayContainer`: Owns an `OverlayManager` and mounts the host automatically
 - `@Environment(\.overlayManager)`: Optional environment hook (unwrap before presenting)
 - `presentCentered(...)`: Show a centered overlay
 - `AnchoredOverlayButton(...)`: Show an overlay anchored to the triggering button
-- `dismissTop()`, `dismissAll()`: Remove the top-most or all overlays
-- `OverlayDismissPolicy`: `.tapOutside`, `.actionOnly`, `.none`
+- `dismissTop()`, `dismiss(id:)`, `dismissAll()`: Remove overlays from the stack
+- `DismissPolicy`: `.programmatic` or `.tap`
 - `OverlayInteractionBarrier`: `.blockAll`, `.passthrough`
+- `.onTapBackground(perform:)`: Modifier to intercept background taps and provide custom dismissal logic
 
 ## License
 
