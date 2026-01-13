@@ -19,6 +19,94 @@ import SwiftUI
 /// ```
 public typealias OverlayID = UUID
 
+// MARK: - Duplicate Action
+
+/// A policy that defines how duplicate overlays with the same identifier are handled.
+public enum DuplicateAction: Sendable {
+  /// Ignores the new overlay if one with the same key already exists.
+  case ignore
+  /// Replaces the existing overlay with the new one.
+  case replace
+}
+
+// MARK: - Overlay Identifier
+
+/// An identifier for controlling overlay uniqueness and duplicate behavior.
+///
+/// Use this type to control whether an overlay can be presented multiple times
+/// or should be unique within the overlay stack.
+///
+/// ## Usage
+///
+/// ```swift
+/// // Auto-generated ID (allows duplicates)
+/// manager.presentCentered { ToastView() }
+///
+/// // Named identifier that ignores duplicates
+/// manager.presentCentered(id: .unique("settings")) { SettingsSheet() }
+///
+/// // Named identifier that replaces existing overlay
+/// manager.presentCentered(id: .replacing("alert")) { AlertView() }
+/// ```
+///
+/// You can also extend `OverlayIdentifier` in your app for convenience:
+///
+/// ```swift
+/// extension OverlayIdentifier {
+///   static var settings: Self { .unique("settings") }
+///   static var todoSheet: Self { .unique("todoSheet") }
+/// }
+///
+/// manager.presentCentered(id: .settings) { SettingsSheet() }
+/// ```
+public struct OverlayIdentifier: Hashable, Sendable {
+  enum Kind: Hashable, Sendable {
+    case auto(UUID)
+    case named(String, DuplicateAction)
+  }
+
+  let kind: Kind
+
+  /// Creates an auto-generated unique identifier.
+  ///
+  /// Each call creates a new UUID, so multiple overlays with `.auto` identifiers
+  /// will always be treated as distinct.
+  public static var auto: Self { .init(kind: .auto(UUID())) }
+
+  /// Creates a named identifier that ignores duplicate presentations.
+  ///
+  /// If an overlay with the same key is already presented, the new presentation
+  /// request is ignored and the method returns `nil`.
+  ///
+  /// - Parameter name: A unique string key for the overlay.
+  /// - Returns: An identifier configured to ignore duplicates.
+  public static func unique(_ name: String) -> Self {
+    .init(kind: .named(name, .ignore))
+  }
+
+  /// Creates a named identifier that replaces existing overlays.
+  ///
+  /// If an overlay with the same key is already presented, it is dismissed
+  /// before the new overlay is presented.
+  ///
+  /// - Parameter name: A unique string key for the overlay.
+  /// - Returns: An identifier configured to replace duplicates.
+  public static func replacing(_ name: String) -> Self {
+    .init(kind: .named(name, .replace))
+  }
+
+  /// Extracts the string key if this is a named identifier.
+  var namedKey: String? {
+    if case .named(let key, _) = kind { return key }
+    return nil
+  }
+
+  /// Extracts the duplicate action if this is a named identifier.
+  var duplicateAction: DuplicateAction? {
+    if case .named(_, let action) = kind { return action }
+    return nil
+  }
+}
 
 // MARK: - Dismissal Policy
 
@@ -94,6 +182,8 @@ enum OverlayPresentation: Equatable {
 /// Not exposed publicly; used for rendering and layout calculations.
 struct OverlayItem: Identifiable {
   let id: OverlayID
+  /// The string key from a named `OverlayIdentifier`, if provided.
+  let identifierKey: String?
   let presentation: OverlayPresentation
   let dismissPolicy: DismissPolicy
   let barrier: OverlayInteractionBarrier

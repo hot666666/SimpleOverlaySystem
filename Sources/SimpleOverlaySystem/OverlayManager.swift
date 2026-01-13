@@ -27,24 +27,27 @@ public final class OverlayManager {
   /// Presents a centered overlay.
   ///
   /// - Parameters:
-  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap()`.
+  ///   - id: The identifier controlling uniqueness. Defaults to `.auto`.
+  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap`.
   ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
   ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
   ///   - offset: A custom offset from the center of the screen.
   ///   - content: The overlay view to render.
-  /// - Returns: The identifier of the newly presented overlay.
+  /// - Returns: The identifier of the newly presented overlay, or `nil` if ignored due to duplicate.
   @discardableResult
   public func presentCentered(
+    id: OverlayIdentifier = .auto,
     dismissPolicy: DismissPolicy = .tap,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
     offset: CGPoint = .zero,
     @ViewBuilder content: @escaping () -> some View
-  ) -> OverlayID {
-    let id = OverlayID()
+  ) -> OverlayID? {
+    guard let resolvedId = resolveIdentifier(id) else { return nil }
     let builder = content
     let item = OverlayItem(
-      id: id,
+      id: resolvedId,
+      identifierKey: id.namedKey,
       presentation: .centered(offset: offset),
       dismissPolicy: dismissPolicy,
       barrier: barrier,
@@ -54,32 +57,35 @@ public final class OverlayManager {
       size: nil
     )
     push(item)
-    return id
+    return resolvedId
   }
 
   /// Presents an overlay relative to a captured anchor frame and placement.
   ///
   /// - Parameters:
+  ///   - id: The identifier controlling uniqueness. Defaults to `.auto`.
   ///   - anchorFrame: The source view's frame in the container's coordinate space.
   ///   - placement: Whether to show above or below, and how to align horizontally.
-  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap()`.
+  ///   - dismissPolicy: The policy defining how the overlay can be dismissed. Defaults to `.tap`.
   ///   - barrier: Whether interactions should be blocked or pass through. Defaults to `.blockAll`.
   ///   - backdropOpacity: Scrim opacity behind the overlay. Defaults to `0.35`.
   ///   - content: The overlay view to render.
-  /// - Returns: The identifier of the newly presented overlay.
+  /// - Returns: The identifier of the newly presented overlay, or `nil` if ignored due to duplicate.
   @discardableResult
   public func presentAnchored(
+    id: OverlayIdentifier = .auto,
     anchorFrame: CGRect?,
     placement: OverlayPlacement,
     dismissPolicy: DismissPolicy = .tap,
     barrier: OverlayInteractionBarrier = .blockAll,
     backdropOpacity: Double = 0.35,
     @ViewBuilder content: @escaping () -> some View
-  ) -> OverlayID {
-    let id = OverlayID()
+  ) -> OverlayID? {
+    guard let resolvedId = resolveIdentifier(id) else { return nil }
     let builder = content
     let item = OverlayItem(
-      id: id,
+      id: resolvedId,
+      identifierKey: id.namedKey,
       presentation: .anchored(placement: placement),
       dismissPolicy: dismissPolicy,
       barrier: barrier,
@@ -89,7 +95,7 @@ public final class OverlayManager {
       size: nil
     )
     push(item)
-    return id
+    return resolvedId
   }
 
   /// Removes the most recently presented overlay.
@@ -132,5 +138,46 @@ extension OverlayManager {
   private func updateItem(_ id: OverlayID, perform: (inout OverlayItem) -> Void) {
     guard let index = stack.firstIndex(where: { $0.id == id }) else { return }
     perform(&stack[index])
+  }
+
+  /// Resolves an `OverlayIdentifier` to a concrete `OverlayID`, handling duplicate logic.
+  ///
+  /// - Parameter identifier: The identifier to resolve.
+  /// - Returns: A valid `OverlayID` to use, or `nil` if the overlay should be ignored.
+  private func resolveIdentifier(_ identifier: OverlayIdentifier) -> OverlayID? {
+    switch identifier.kind {
+    case .auto(let uuid):
+      return uuid
+
+    case .named(let key, let action):
+      if contains(key: key) {
+        switch action {
+        case .ignore:
+          return nil
+        case .replace:
+          dismiss(key: key)
+        }
+      }
+      return OverlayID()
+    }
+  }
+}
+
+// MARK: - Public Query API
+
+extension OverlayManager {
+  /// Returns whether an overlay with the specified key is currently presented.
+  ///
+  /// - Parameter key: The string key from a named `OverlayIdentifier`.
+  /// - Returns: `true` if an overlay with that key exists in the stack.
+  public func contains(key: String) -> Bool {
+    stack.contains { $0.identifierKey == key }
+  }
+
+  /// Dismisses all overlays with the specified key.
+  ///
+  /// - Parameter key: The string key from a named `OverlayIdentifier`.
+  public func dismiss(key: String) {
+    stack.removeAll { $0.identifierKey == key }
   }
 }
