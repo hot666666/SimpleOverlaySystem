@@ -19,6 +19,79 @@ import SwiftUI
 /// ```
 public typealias OverlayID = UUID
 
+// MARK: - Duplicate Action
+
+/// A policy that defines how duplicate overlays with the same identifier are handled.
+public enum DuplicateAction: Sendable {
+  /// Ignores the new overlay if one with the same key already exists.
+  case ignore
+  /// Replaces the existing overlay with the new one.
+  case replace
+}
+
+// MARK: - Overlay Identifier
+
+/// An identifier for controlling overlay uniqueness and duplicate behavior.
+///
+/// Use this type to control whether an overlay can be presented multiple times
+/// or should be unique within the overlay stack.
+///
+/// ## Usage
+///
+/// ```swift
+/// // Auto-generated ID (allows duplicates)
+/// manager.presentCentered { ToastView() }
+///
+/// // Named identifier that ignores duplicates
+/// manager.presentCentered(id: .unique("settings")) { SettingsSheet() }
+///
+/// // Named identifier that replaces existing overlay
+/// manager.presentCentered(id: .replacing("alert")) { AlertView() }
+/// ```
+///
+/// You can also extend `OverlayIdentifier` in your app for convenience:
+///
+/// ```swift
+/// extension OverlayIdentifier {
+///   static var settings: Self { .unique("settings") }
+///   static var todoSheet: Self { .unique("todoSheet") }
+/// }
+///
+/// manager.presentCentered(id: .settings) { SettingsSheet() }
+/// ```
+public struct OverlayIdentifier: Hashable, Sendable {
+  enum Kind: Hashable, Sendable {
+    case auto
+    case named(String, DuplicateAction)
+  }
+
+  let kind: Kind
+
+  /// Automatically generates a unique identifier for every presentation (default behavior).
+  public static var auto: Self { .init(kind: .auto) }
+
+  /// Ignores the presentation if an overlay with the same key is already active.
+  ///
+  /// - Parameter key: A unique string key for the overlay.
+  /// - Returns: An identifier configured to ignore duplicates.
+  public static func unique(_ key: String) -> Self {
+    .init(kind: .named(key, .ignore))
+  }
+
+  /// Replaces any existing overlay with the same key before presenting the new one.
+  ///
+  /// - Parameter key: A unique string key for the overlay.
+  /// - Returns: An identifier configured to replace duplicates.
+  public static func replacing(_ key: String) -> Self {
+    .init(kind: .named(key, .replace))
+  }
+
+  /// Extracts the string key if this is a named identifier.
+  var namedKey: String? {
+    if case .named(let key, _) = kind { return key }
+    return nil
+  }
+}
 
 // MARK: - Dismissal Policy
 
@@ -94,6 +167,8 @@ enum OverlayPresentation: Equatable {
 /// Not exposed publicly; used for rendering and layout calculations.
 struct OverlayItem: Identifiable {
   let id: OverlayID
+  /// The string key from a named `OverlayIdentifier`, if provided.
+  let identifierKey: String?
   let presentation: OverlayPresentation
   let dismissPolicy: DismissPolicy
   let barrier: OverlayInteractionBarrier

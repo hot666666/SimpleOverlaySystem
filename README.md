@@ -7,6 +7,7 @@ A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack
 ## Features
 
 - Centered overlays and anchored overlays (shown above/below a source view)
+- **Overlay identifier** for controlling duplicate overlays (unique, replacing, auto)
 - Flexible dismissal policies: tap outside or programmatic only
 - Custom background tap handlers via `.onTapBackground` modifier for conditional dismissal
 - Background interaction barrier: block all or passthrough, with optional scrim
@@ -195,13 +196,69 @@ overlay?.presentCentered(dismissPolicy: .tap) {
 
 > **Note**: The `.onTapBackground` modifier only works when the overlay's `dismissPolicy` is set to `.tap`. For `.programmatic` overlays, background taps are ignored regardless of the modifier.
 
+## Overlay Identifier (Duplicate Control)
+
+Control whether an overlay can be presented multiple times or should remain unique.
+
+### Available Policies
+
+- **`.auto`** (default): Generates a new ID each time. Multiple overlays allowed.
+- **`.unique("key")`**: Ignores new presentations if an overlay with the same key exists.
+- **`.replacing("key")`**: Dismisses the existing overlay and presents a new one.
+
+### Usage
+
+```swift
+// Default auto behavior - allows duplicates
+overlay?.presentCentered { ToastView() }
+
+// Unique - ignores if already presented
+overlay?.presentCentered(id: .unique("settings")) {
+    SettingsSheet()
+}
+
+// Replacing - dismisses existing and presents new
+overlay?.presentCentered(id: .replacing("alert")) {
+    AlertView()
+}
+```
+
+### Extending for Convenience
+
+Define static members in your app for cleaner call sites:
+
+```swift
+extension OverlayIdentifier {
+    static var settings: Self { .unique("settings") }
+    static var todoSheet: Self { .unique("todoSheet") }
+}
+
+// Usage
+overlay?.presentCentered(id: .settings) { SettingsSheet() }
+```
+
+### Query and Dismiss by Key
+
+```swift
+// Check if an overlay with a specific key is presented
+if overlay?.contains(key: "settings") == true {
+    // ...
+}
+
+// Dismiss overlays with a specific key
+overlay?.dismiss(key: "settings")
+```
+
 ## API Summary
 
 - `OverlayContainer`: Owns an `OverlayManager` and mounts the host automatically
 - `@Environment(\.overlayManager)`: Optional environment hook (unwrap before presenting)
-- `presentCentered(...)`: Show a centered overlay
+- `presentCentered(id:...)`: Show a centered overlay with optional identifier
+- `presentAnchored(id:...)`: Show an anchored overlay with optional identifier
 - `AnchoredOverlayButton(...)`: Show an overlay anchored to the triggering button
-- `dismissTop()`, `dismiss(id:)`, `dismissAll()`: Remove overlays from the stack
+- `dismissTop()`, `dismiss(id:)`, `dismiss(key:)`, `dismissAll()`: Remove overlays from the stack
+- `contains(key:)`: Check if an overlay with the specified key is presented
+- `OverlayIdentifier`: `.auto`, `.unique("key")`, `.replacing("key")`
 - `DismissPolicy`: `.programmatic` or `.tap`
 - `OverlayInteractionBarrier`: `.blockAll`, `.passthrough`
 - `.onTapBackground(perform:)`: Modifier to intercept background taps and provide custom dismissal logic
