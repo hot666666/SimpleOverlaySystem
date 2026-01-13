@@ -61,49 +61,34 @@ public enum DuplicateAction: Sendable {
 /// ```
 public struct OverlayIdentifier: Hashable, Sendable {
   enum Kind: Hashable, Sendable {
-    case auto(UUID)
+    case auto
     case named(String, DuplicateAction)
   }
 
   let kind: Kind
 
-  /// Creates an auto-generated unique identifier.
-  ///
-  /// Each call creates a new UUID, so multiple overlays with `.auto` identifiers
-  /// will always be treated as distinct.
-  public static var auto: Self { .init(kind: .auto(UUID())) }
+  /// Automatically generates a unique identifier for every presentation (default behavior).
+  public static var auto: Self { .init(kind: .auto) }
 
-  /// Creates a named identifier that ignores duplicate presentations.
+  /// Ignores the presentation if an overlay with the same key is already active.
   ///
-  /// If an overlay with the same key is already presented, the new presentation
-  /// request is ignored and the method returns `nil`.
-  ///
-  /// - Parameter name: A unique string key for the overlay.
+  /// - Parameter key: A unique string key for the overlay.
   /// - Returns: An identifier configured to ignore duplicates.
-  public static func unique(_ name: String) -> Self {
-    .init(kind: .named(name, .ignore))
+  public static func unique(_ key: String) -> Self {
+    .init(kind: .named(key, .ignore))
   }
 
-  /// Creates a named identifier that replaces existing overlays.
+  /// Replaces any existing overlay with the same key before presenting the new one.
   ///
-  /// If an overlay with the same key is already presented, it is dismissed
-  /// before the new overlay is presented.
-  ///
-  /// - Parameter name: A unique string key for the overlay.
+  /// - Parameter key: A unique string key for the overlay.
   /// - Returns: An identifier configured to replace duplicates.
-  public static func replacing(_ name: String) -> Self {
-    .init(kind: .named(name, .replace))
+  public static func replacing(_ key: String) -> Self {
+    .init(kind: .named(key, .replace))
   }
 
   /// Extracts the string key if this is a named identifier.
   var namedKey: String? {
     if case .named(let key, _) = kind { return key }
-    return nil
-  }
-
-  /// Extracts the duplicate action if this is a named identifier.
-  var duplicateAction: DuplicateAction? {
-    if case .named(_, let action) = kind { return action }
     return nil
   }
 }

@@ -146,8 +146,8 @@ extension OverlayManager {
   /// - Returns: A valid `OverlayID` to use, or `nil` if the overlay should be ignored.
   private func resolveIdentifier(_ identifier: OverlayIdentifier) -> OverlayID? {
     switch identifier.kind {
-    case .auto(let uuid):
-      return uuid
+    case .auto:
+      return OverlayID()
 
     case .named(let key, let action):
       if contains(key: key) {
