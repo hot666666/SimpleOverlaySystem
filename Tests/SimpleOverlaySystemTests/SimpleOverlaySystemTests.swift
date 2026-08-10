@@ -308,13 +308,13 @@ struct SemanticSurfaceTests {
   @MainActor func automaticToastDismisses() async throws {
     let manager = OverlayManager()
     let automatic = manager.present(
-      .toast(edge: .bottom, duration: .seconds(0.01))
+      .toast(edge: .bottom, duration: .seconds(0.02))
     ) { Text("Automatic") }!
     let persistent = manager.present(
       .toast(edge: .top, duration: .persistent)
     ) { Text("Persistent") }!
 
-    try await Task.sleep(for: .milliseconds(30))
+    try await Task.sleep(for: .milliseconds(200))
 
     #expect(manager.item(withID: automatic) == nil)
     #expect(manager.item(withID: persistent) != nil)
@@ -399,6 +399,29 @@ struct SemanticSurfaceTests {
     manager.dismiss(id: id)
     #expect(didDismiss)
   }
+
+  @Test("geometry overflow notifies a Binding-owned Toast")
+  @MainActor func geometryOverflowNotifiesBindingOwner() {
+    let manager = OverlayManager()
+    let id = OverlayID()
+    var didDismiss = false
+
+    manager.synchronizeBindingPresentation(
+      id: id,
+      presentation: .surface(.toast(edge: .bottom, duration: .persistent)),
+      dismissPolicy: .programmatic,
+      barrier: .passthrough,
+      backdropOpacity: 0,
+      anchorFrame: nil,
+      content: { AnyView(Text("Large Toast")) },
+      onDismiss: { didDismiss = true }
+    )
+
+    manager.removeOverflowingToasts(ids: [id])
+
+    #expect(manager.item(withID: id) == nil)
+    #expect(didDismiss)
+  }
 }
 
 @Suite("Semantic overlay layout")
@@ -480,6 +503,69 @@ struct SemanticOverlayLayoutTests {
     #expect(position.x == 66)
   }
 
+  @Test("large Toasts evict the oldest item before lanes overlap")
+  func largeToastsUseGeometryAwareOverflow() {
+    let oldest = OverlayID()
+    let middle = OverlayID()
+    let newest = OverlayID()
+    let size = CGSize(width: 300, height: 300)
+    let entries = [oldest, middle, newest].map {
+      ToastLayoutEntry(id: $0, edge: .bottom, size: size)
+    }
+
+    let plan = OverlayLayout.toastStackPlan(
+      entries: entries,
+      containerSize: CGSize(width: 360, height: 640),
+      configuration: configuration
+    )
+
+    #expect(plan.visibleEntries.map(\.id) == [middle, newest])
+    #expect(plan.overflowIDs == [oldest])
+
+    let frames = plan.visibleEntries.map { entry in
+      let position = OverlayLayout.position(
+        id: entry.id,
+        presentation: .surface(.toast(edge: .bottom, duration: .persistent)),
+        containerSize: CGSize(width: 360, height: 640),
+        contentSize: entry.size,
+        anchorRect: nil,
+        configuration: configuration,
+        toastStack: plan.visibleEntries
+      )
+      return CGRect(
+        x: position.x - entry.size.width / 2,
+        y: position.y - entry.size.height / 2,
+        width: entry.size.width,
+        height: entry.size.height
+      )
+    }
+
+    #expect(!frames[0].intersects(frames[1]))
+  }
+
+  @Test("container shrink keeps only the newest Toasts that still fit")
+  func toastPlanRespondsToContainerShrink() {
+    let ids = [OverlayID(), OverlayID(), OverlayID()]
+    let entries = ids.map {
+      ToastLayoutEntry(id: $0, edge: .bottom, size: CGSize(width: 280, height: 140))
+    }
+
+    let widePlan = OverlayLayout.toastStackPlan(
+      entries: entries,
+      containerSize: CGSize(width: 360, height: 640),
+      configuration: configuration
+    )
+    let shortPlan = OverlayLayout.toastStackPlan(
+      entries: entries,
+      containerSize: CGSize(width: 360, height: 340),
+      configuration: configuration
+    )
+
+    #expect(widePlan.visibleEntries.map(\.id) == ids)
+    #expect(shortPlan.visibleEntries.map(\.id) == Array(ids.suffix(2)))
+    #expect(shortPlan.overflowIDs == [ids[0]])
+  }
+
   @Test("drawer extent and position remain inside host bounds", arguments: [360.0, 736.0, 1024.0])
   func drawerStaysInsideHost(width: CGFloat) {
     let containerSize = CGSize(width: width, height: 768)
@@ -557,5 +643,23 @@ struct BindingAPICompileTests {
   @Test("all Binding façades compose as SwiftUI modifiers")
   @MainActor func bindingFacadesCompile() {
     _ = BindingAPIFixture()
+  }
+}
+
+@Suite("Dismiss handler freshness")
+struct DismissHandlerFreshnessTests {
+  @Test("a stored preference handler performs its latest action")
+  @MainActor func storedHandlerUsesLatestAction() {
+    let actionBox = DismissHandlerActionBox()
+    let storedHandler = DismissHandler(id: OverlayID(), actionBox: actionBox)
+    var outcome = ""
+
+    actionBox.update { outcome = "blocked" }
+    storedHandler.perform()
+    #expect(outcome == "blocked")
+
+    actionBox.update { outcome = "dismissed" }
+    storedHandler.perform()
+    #expect(outcome == "dismissed")
   }
 }

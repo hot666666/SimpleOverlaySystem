@@ -251,6 +251,17 @@ extension OverlayManager {
     remove(where: { $0.id == id }, notifyOwner: false)
   }
 
+  /// Removes measured Toasts that cannot fit their current host lane without
+  /// overlap. Host geometry is intentionally not stored in the manager.
+  func removeOverflowingToasts(ids: [OverlayID]) {
+    guard !ids.isEmpty else { return }
+    let overflowIDs = Set(ids)
+    remove(
+      where: { $0.isToast && overflowIDs.contains($0.id) },
+      notifyOwner: true
+    )
+  }
+
   /// Performs in-place mutations on the overlay with the matching identifier.
   private func updateItem(_ id: OverlayID, perform: (inout OverlayItem) -> Void) {
     guard let index = stack.firstIndex(where: { $0.id == id }) else { return }

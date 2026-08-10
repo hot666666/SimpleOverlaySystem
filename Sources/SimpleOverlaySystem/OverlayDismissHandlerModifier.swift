@@ -85,10 +85,13 @@ public extension View {
 /// multiple overlays are stacked.
 private struct OverlayDismissHandlerModifier: ViewModifier {
   @Environment(\.overlayID) private var overlayID
+  @State private var actionBox = DismissHandlerActionBox()
   let action: @MainActor @Sendable () -> Void
 
   func body(content: Content) -> some View {
-    content
+    actionBox.update(action)
+    return
+      content
       .preference(
         key: OverlayDismissHandlerPreferenceKey.self,
         value: preferenceValue
@@ -101,7 +104,7 @@ private struct OverlayDismissHandlerModifier: ViewModifier {
   /// If no overlay ID is available (e.g., not in an overlay context), returns an empty dictionary.
   private var preferenceValue: [OverlayID: DismissHandler] {
     guard let overlayID else { return [:] }
-    return [overlayID: DismissHandler(id: overlayID, action: action)]
+    return [overlayID: DismissHandler(id: overlayID, actionBox: actionBox)]
   }
 }
 
@@ -120,10 +123,12 @@ struct OverlayDismissRequestHandlerPreferenceKey: PreferenceKey {
 
 private struct OverlayDismissRequestHandlerModifier: ViewModifier {
   @Environment(\.overlayID) private var overlayID
+  @State private var actionBox = DismissHandlerActionBox()
   let action: @MainActor @Sendable () -> Void
 
   func body(content: Content) -> some View {
-    content.preference(
+    actionBox.update(action)
+    return content.preference(
       key: OverlayDismissRequestHandlerPreferenceKey.self,
       value: preferenceValue
     )
@@ -131,6 +136,6 @@ private struct OverlayDismissRequestHandlerModifier: ViewModifier {
 
   private var preferenceValue: [OverlayID: DismissHandler] {
     guard let overlayID else { return [:] }
-    return [overlayID: DismissHandler(id: overlayID, action: action)]
+    return [overlayID: DismissHandler(id: overlayID, actionBox: actionBox)]
   }
 }

@@ -54,7 +54,7 @@ struct OverlayHost: ViewModifier {
     if let manager, !manager.stack.isEmpty {
       let containerFrame = proxy.frame(in: .named(OverlaySpace.name))
       let topInteractive = manager.stack.last(where: { !$0.isToast })
-      let toastStack = toastLayoutEntries(manager: manager, proxy: proxy)
+      let toastPlan = toastLayoutPlan(manager: manager, proxy: proxy)
       ZStack(alignment: .top) {
         if let topInteractive {
           backgroundBarrier(for: topInteractive, manager: manager)
@@ -66,9 +66,10 @@ struct OverlayHost: ViewModifier {
             proxy: proxy,
             containerFrame: containerFrame,
             isTopInteractive: isTopInteractive,
+            isVisibleInToastLane: toastPlan.visibleIDs.contains(item.id),
             layoutDirection: layoutDirection,
             configuration: manager.configuration,
-            toastStack: toastStack,
+            toastStack: toastPlan.visibleEntries,
             onDismissRequest: {
               handleDismissRequest(for: item, manager: manager, source: .escape)
             }
@@ -83,6 +84,9 @@ struct OverlayHost: ViewModifier {
         }
       }
       .animation(reduceMotion ? .easeOut(duration: 0.12) : .easeOut(duration: 0.22), value: manager.stack.map(\.id))
+      .task(id: toastPlan.overflowIDs) {
+        manager.removeOverflowingToasts(ids: toastPlan.overflowIDs)
+      }
     } else {
       EmptyView()
     }
@@ -121,12 +125,12 @@ struct OverlayHost: ViewModifier {
     source: DismissRequestSource
   ) {
     if let requestHandler = dismissRequestHandlers[item.id] {
-      requestHandler.action()
+      requestHandler.perform()
       return
     }
 
     if source == .backdrop, let legacyHandler = dismissHandlers[item.id] {
-      legacyHandler.action()
+      legacyHandler.perform()
       return
     }
 
@@ -148,11 +152,11 @@ struct OverlayHost: ViewModifier {
     return Double(layer + index + 1)
   }
 
-  private func toastLayoutEntries(
+  private func toastLayoutPlan(
     manager: OverlayManager,
     proxy: GeometryProxy
-  ) -> [ToastLayoutEntry] {
-    manager.stack.compactMap { item in
+  ) -> ToastStackPlan {
+    let entries: [ToastLayoutEntry] = manager.stack.compactMap { item in
       guard case .toast(let edge, _, _) = item.surface,
         let intrinsicSize = item.size
       else { return nil }
@@ -166,6 +170,13 @@ struct OverlayHost: ViewModifier {
       )
       return ToastLayoutEntry(id: item.id, edge: edge, size: renderedSize)
     }
+    return OverlayLayout.toastStackPlan(
+      entries: entries,
+      containerSize: proxy.size,
+      safeAreaInsets: proxy.safeAreaInsets,
+      layoutDirection: layoutDirection,
+      configuration: manager.configuration
+    )
   }
 
   private func transition(for item: OverlayItem) -> AnyTransition {
@@ -216,6 +227,7 @@ private struct OverlayElement: View {
   let proxy: GeometryProxy
   let containerFrame: CGRect
   let isTopInteractive: Bool
+  let isVisibleInToastLane: Bool
   let layoutDirection: LayoutDirection
   let configuration: OverlayConfiguration
   let toastStack: [ToastLayoutEntry]
@@ -235,10 +247,12 @@ private struct OverlayElement: View {
     .background(OverlaySizeReader(id: item.id))
     .modifier(OverlayClippingModifier(isEnabled: item.isDrawer))
     .position(position)
-    .opacity(isMeasured ? 1 : 0)
+    .opacity(isRendered ? 1 : 0)
     .accessibilityAddTraits(item.isToast ? [] : .isModal)
-    .allowsHitTesting(item.isToast || isTopInteractive)
-    .accessibilityHidden(!item.isToast && !isTopInteractive)
+    .allowsHitTesting((item.isToast && isVisibleInToastLane) || isTopInteractive)
+    .accessibilityHidden(
+      (item.isToast && !isVisibleInToastLane) || (!item.isToast && !isTopInteractive)
+    )
     .accessibilityFocused($isAccessibilityFocused)
     .focusable(item.isDrawer)
     .focusEffectDisabled()
@@ -279,6 +293,10 @@ private struct OverlayElement: View {
   private var measuredSize: CGSize? { item.size }
 
   private var isMeasured: Bool { measuredSize != nil }
+
+  private var isRendered: Bool {
+    isMeasured && (!item.isToast || isVisibleInToastLane)
+  }
 
   private var renderedSize: CGSize {
     guard let measuredSize else { return .zero }

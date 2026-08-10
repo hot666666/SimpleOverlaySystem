@@ -304,17 +304,34 @@ struct OverlayItem: Identifiable {
 
 // MARK: - Preference Key
 
-/// A wrapper for dismiss handler closures that provides value semantics.
-///
-/// This struct wraps a dismiss action closure along with a unique identifier,
-/// enabling it to be used in SwiftUI's preference system which requires `Equatable` conformance.
-/// Equality is based solely on the identifier, not the closure itself.
-struct DismissHandler: Equatable, Sendable {
+/// Stable indirection retained by the Host even when SwiftUI considers the
+/// surrounding preference value unchanged. The modifier refreshes `action` on
+/// every body evaluation, so a mounted overlay never calls stale validation.
+@MainActor
+final class DismissHandlerActionBox {
+  private var action: @MainActor @Sendable () -> Void = {}
+
+  func update(_ action: @escaping @MainActor @Sendable () -> Void) {
+    self.action = action
+  }
+
+  func perform() {
+    action()
+  }
+}
+
+/// Value-semantic preference payload backed by a stable, refreshable action.
+struct DismissHandler: Equatable {
   let id: UUID
-  let action: @MainActor @Sendable () -> Void
+  let actionBox: DismissHandlerActionBox
+
+  @MainActor
+  func perform() {
+    actionBox.perform()
+  }
 
   static func == (lhs: DismissHandler, rhs: DismissHandler) -> Bool {
-    lhs.id == rhs.id
+    lhs.id == rhs.id && lhs.actionBox === rhs.actionBox
   }
 }
 

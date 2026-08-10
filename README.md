@@ -141,7 +141,9 @@ overlay?.present(
 - `.seconds(_:)` supplies a custom lifetime.
 - `.persistent` requires explicit dismissal.
 - The newest toast stays closest to its edge.
-- Each edge shows at most three toasts by default; overflow removes the oldest.
+- Each edge shows at most three toasts by default. If the measured content does
+  not fit the available safe-area lane, the host keeps the newest toasts that
+  fit without overlap and removes older overflow.
 
 ### Drawers
 

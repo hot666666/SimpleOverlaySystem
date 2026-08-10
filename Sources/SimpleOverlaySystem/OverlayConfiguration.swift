@@ -11,8 +11,10 @@ public struct OverlayConfiguration: Equatable, Sendable {
   /// Spacing between toasts stacked on the same edge. Negative values passed
   /// to the initializer become `0`.
   public var toastSpacing: CGFloat
-  /// Maximum number of visible toasts on each semantic edge. When a lane
-  /// overflows, the host removes its oldest toast. The minimum value is `1`.
+  /// Maximum number of visible toasts on each semantic edge. This is an upper
+  /// bound: the host may show fewer when measured content cannot fit the
+  /// safe-area lane without overlap. Overflow removes the oldest toast. The
+  /// minimum value is `1`.
   public var maximumVisibleToastsPerEdge: Int
   /// Backdrop opacity used by semantic drawers, clamped to `0 ... 1`.
   public var drawerBackdropOpacity: Double
@@ -25,7 +27,8 @@ public struct OverlayConfiguration: Equatable, Sendable {
   /// - Parameters:
   ///   - toastEdgePadding: Safe-area-relative padding for toast lanes.
   ///   - toastSpacing: Distance between toasts on the same edge.
-  ///   - maximumVisibleToastsPerEdge: Maximum visible toast count per edge.
+  ///   - maximumVisibleToastsPerEdge: Upper bound for visible toasts per edge.
+  ///     The measured lane capacity may reduce the visible count.
   ///   - drawerBackdropOpacity: Black backdrop opacity for semantic drawers.
   public init(
     toastEdgePadding: CGFloat = 16,

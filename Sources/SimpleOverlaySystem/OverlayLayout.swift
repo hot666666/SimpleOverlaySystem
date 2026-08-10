@@ -8,6 +8,14 @@ struct ToastLayoutEntry: Equatable {
   let size: CGSize
 }
 
+/// Geometry-aware lane result. Entries preserve manager presentation order,
+/// while overflow IDs identify older Toasts that cannot fit without overlap.
+struct ToastStackPlan: Equatable {
+  let visibleEntries: [ToastLayoutEntry]
+  let visibleIDs: Set<OverlayID>
+  let overflowIDs: [OverlayID]
+}
+
 /// Pure layout calculations shared by legacy and semantic presentations.
 enum OverlayLayout {
   static func renderedSize(
@@ -135,6 +143,63 @@ enum OverlayLayout {
     let width = max(0, containerSize.width - minX - rightInset - additionalInset)
     let height = max(0, containerSize.height - minY - safeAreaInsets.bottom - additionalInset)
     return CGRect(x: minX, y: minY, width: width, height: height)
+  }
+
+  /// Keeps the newest Toasts that fit both the configured count and the
+  /// measured safe-area lane extent. An item is accepted atomically; spacing is
+  /// never compressed and content is never scaled to hide an overflow.
+  static func toastStackPlan(
+    entries: [ToastLayoutEntry],
+    containerSize: CGSize,
+    safeAreaInsets: EdgeInsets = EdgeInsets(),
+    layoutDirection: LayoutDirection = .leftToRight,
+    configuration: OverlayConfiguration = .default
+  ) -> ToastStackPlan {
+    let bounds = safeRect(
+      containerSize: containerSize,
+      safeAreaInsets: safeAreaInsets,
+      layoutDirection: layoutDirection,
+      additionalInset: configuration.toastEdgePadding
+    )
+    let entriesByEdge = Dictionary(grouping: entries, by: \.edge)
+    var visibleIDs: Set<OverlayID> = []
+
+    for (edge, laneEntries) in entriesByEdge {
+      let physicalEdge = physicalEdge(for: edge, layoutDirection: layoutDirection)
+      let availableExtent: CGFloat
+      switch physicalEdge {
+      case .top, .bottom:
+        availableExtent = bounds.height
+      case .left, .right:
+        availableExtent = bounds.width
+      }
+
+      var usedExtent: CGFloat = 0
+      var visibleCount = 0
+      for entry in laneEntries.reversed() {
+        let itemExtent: CGFloat
+        switch physicalEdge {
+        case .top, .bottom:
+          itemExtent = entry.size.height
+        case .left, .right:
+          itemExtent = entry.size.width
+        }
+        let requiredExtent = itemExtent + (visibleCount == 0 ? 0 : configuration.toastSpacing)
+        guard visibleCount < configuration.maximumVisibleToastsPerEdge,
+          usedExtent + requiredExtent <= availableExtent
+        else { continue }
+
+        visibleIDs.insert(entry.id)
+        usedExtent += requiredExtent
+        visibleCount += 1
+      }
+    }
+
+    return ToastStackPlan(
+      visibleEntries: entries.filter { visibleIDs.contains($0.id) },
+      visibleIDs: visibleIDs,
+      overflowIDs: entries.filter { !visibleIDs.contains($0.id) }.map(\.id)
+    )
   }
 
   private static func anchoredPosition(

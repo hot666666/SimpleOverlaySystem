@@ -15,7 +15,7 @@ The host keeps coordinates, measured sizes, safe-area projection, stacking lanes
 
 | Surface | Caller chooses | Host owns |
 | --- | --- | --- |
-| Toast | edge, alignment, duration, identifier, content | passthrough interaction, no backdrop, no focus capture, timer, per-edge capacity, inward stacking |
+| Toast | edge, alignment, duration, identifier, content | passthrough interaction, no backdrop, no focus capture, timer, measured per-edge capacity, inward stacking |
 | Drawer | leading/trailing/bottom edge, extent, identifier, content | blocking backdrop, focus, Escape and accessibility dismissal, edge transition, safe-area-constrained layout |
 | Centered / Anchored | placement plus the existing dismissal and barrier options | measurement, stack order, host-relative positioning |
 
@@ -26,10 +26,10 @@ Semantic surfaces intentionally do not expose raw offsets, barriers, focus switc
 Both public façades converge before rendering:
 
 1. A View modifier or `OverlayManager.present` creates an internal `OverlayPresentation` request.
-2. `OverlayManager` owns stable identities, presentation order, duplicate handling, Binding callbacks, Toast capacity, and automatic-dismiss tasks.
-3. `OverlayHost` derives the active backdrop, hit testing, transitions, focus, accessibility state, and `dismissOverlay` environment action.
-4. `OverlayLayout` performs pure host-relative geometry for safe areas, layout direction, Toast lanes, and Drawer extents.
-5. Measured size changes feed back into the manager, causing the same request to be laid out again without exposing geometry publicly.
+2. `OverlayManager` owns stable identities, presentation order, duplicate handling, Binding callbacks, the configured Toast count limit, and automatic-dismiss tasks.
+3. `OverlayHost` derives the active backdrop, hit testing, transitions, focus, accessibility state, and `dismissOverlay` environment action. It also applies measured Toast overflow back to the manager so Binding owners are notified.
+4. `OverlayLayout` performs pure host-relative geometry for safe areas, layout direction, measured Toast lane capacity, and Drawer extents.
+5. Measured size changes produce a new layout plan without exposing geometry publicly or storing host geometry in the manager.
 
 This split keeps the public API semantic and small while leaving reusable layout machinery package-internal. Binding-owned requests keep one stable overlay identity: changing a Drawer item updates content in place, while changing a Toast item deliberately restarts its lifetime.
 
@@ -52,7 +52,7 @@ func showSavedToast() {
 }
 ```
 
-A toast does not create a backdrop or take focus when presented. Its own content remains interactive, and all space outside its bounds passes through to underlying content. Toasts group by edge, the newest stays closest to the edge, and overflow removes the oldest item deterministically.
+A toast does not create a backdrop or take focus when presented. Its own content remains interactive, and all space outside its bounds passes through to underlying content. Toasts group by edge, and the newest stays closest to the edge. The configured per-edge count is an upper bound: if measured content exceeds the safe-area lane, the host keeps the newest items that fit without overlap and removes older overflow deterministically.
 
 ## Present a drawer
 
@@ -122,6 +122,8 @@ OverlayContainer(
 ```
 
 Keep shared lane geometry at the host boundary. Per-presentation APIs intentionally do not accept raw positions, offsets, transition directions, focus rules, or interaction barriers for semantic surfaces.
+
+`maximumVisibleToastsPerEdge` limits the count, but does not force that many items to fit. Dynamic content size, the host size, and safe-area insets can reduce the visible count so Toasts never overlap within one lane.
 
 ## Explore in Xcode
 
