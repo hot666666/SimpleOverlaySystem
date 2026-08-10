@@ -122,6 +122,8 @@ overlay?.presentCentered(
 
 ### Toasts
 
+<img src="resource/toast.png" alt="Bottom trailing Toast Example" width="350" height="350">
+
 Use the manager when a toast represents an event. The toast itself can contain buttons, while the rest of the host remains interactive.
 
 ```swift
@@ -146,6 +148,8 @@ overlay?.present(
   fit without overlap and removes older overflow.
 
 ### Drawers
+
+<img src="resource/drawer.png" alt="Trailing Inspector Drawer Example" width="350" height="350">
 
 Drawers own their modal interaction policy. The call site does not configure raw barriers, offsets, focus rules, or transitions.
 
