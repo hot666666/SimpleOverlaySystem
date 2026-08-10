@@ -2,7 +2,7 @@
 
 A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack across your view tree using an Observation-powered `EnvironmentValues` entry and supports centered, anchored, toast, and drawer presentations.
 
-- Platforms: iOS 17+, macOS 14+, Mac Catalyst 17+, tvOS 17+
+- Platforms: iOS 17+, macOS 14+
 
 ## Features
 
@@ -369,6 +369,31 @@ overlay?.dismiss(key: "settings")
 - `OverlayInteractionBarrier`: `.blockAll`, `.passthrough`
 - `.onTapBackground(perform:)`: Modifier to intercept background taps and provide custom dismissal logic
 - `.onOverlayDismissRequest(perform:)`: Unified drawer dismissal interception
+
+## Validation
+
+CI covers checks that are deterministic on a headless GitHub runner:
+
+```sh
+swift test
+swift format lint --recursive Sources Tests
+swift package generate-documentation --target SimpleOverlaySystem
+```
+
+The CI workflow also cross-builds the package for iOS 17. The macOS test build
+compiles the package and exercises manager, Binding, layout, timer, dismiss
+handler freshness, and measured SwiftUI Host geometry behavior.
+
+Window focus and event routing depend on an interactive macOS login session.
+Run the full local suite when changing hit testing, backdrop interaction, focus,
+Escape handling, or dismissal interception:
+
+```sh
+SIMPLE_OVERLAY_RUN_WINDOW_TESTS=1 swift test
+```
+
+Without that environment variable, the four AppKit key-window interaction
+tests are skipped explicitly; they are never reported as CI coverage.
 
 ## License
 

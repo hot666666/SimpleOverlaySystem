@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-and-docs:
-    name: Tests, format, and DocC
+  macos-tests-and-docs:
+    name: macOS tests, format, and DocC
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +24,10 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Run tests
+      - name: Run CI-safe tests
         run: swift test
+        env:
+          SIMPLE_OVERLAY_RUN_WINDOW_TESTS: "0"
 
       - name: Lint Swift formatting
         run: swift format lint --recursive Sources Tests
@@ -33,8 +35,8 @@ jobs:
       - name: Validate DocC
         run: swift package generate-documentation --target SimpleOverlaySystem
 
-  supported-platform-builds:
-    name: iOS, tvOS, and Mac Catalyst builds
+  ios-build:
+    name: iOS build
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -51,24 +53,3 @@ jobs:
             --scratch-path .build/ios \
             --triple arm64-apple-ios17.0 \
             --sdk "$IOS_SDK"
-
-      - name: Build for tvOS
-        run: |
-          TVOS_SDK="$(xcrun --sdk appletvos --show-sdk-path)"
-          swift build \
-            --scratch-path .build/tvos \
-            --triple arm64-apple-tvos17.0 \
-            --sdk "$TVOS_SDK"
-
-      - name: Build for Mac Catalyst
-        run: |
-          MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)"
-          IOS_SUPPORT="$MACOS_SDK/System/iOSSupport"
-          swift build \
-            --scratch-path .build/catalyst \
-            --triple arm64-apple-ios17.0-macabi \
-            --sdk "$MACOS_SDK" \
-            -Xswiftc -F \
-            -Xswiftc "$IOS_SUPPORT/System/Library/Frameworks" \
-            -Xswiftc -I \
-            -Xswiftc "$IOS_SUPPORT/usr/lib/swift"

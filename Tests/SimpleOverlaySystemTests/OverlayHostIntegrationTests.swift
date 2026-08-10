@@ -6,8 +6,14 @@
 
   @testable import SimpleOverlaySystem
 
-  @Suite("SwiftUI OverlayHost integration", .serialized)
-  struct OverlayHostIntegrationTests {
+  /// AppKit key-window behavior requires an interactive macOS login session.
+  /// Keep these tests opt-in so headless CI still exercises the real SwiftUI
+  /// Host geometry path without treating runner focus policy as product state.
+  private let runsWindowInteractionTests =
+    ProcessInfo.processInfo.environment["SIMPLE_OVERLAY_RUN_WINDOW_TESTS"] == "1"
+
+  @Suite("SwiftUI OverlayHost geometry", .serialized)
+  struct OverlayHostGeometryTests {
     @Test("measured large Toasts evict the oldest item without frame overlap")
     @MainActor func measuredLargeToastsDoNotOverlap() async throws {
       let probe = ToastHostProbe()
@@ -46,6 +52,25 @@
       }
     }
 
+    @MainActor
+    private func waitUntil(
+      attempts: Int = 200,
+      condition: @escaping @MainActor () -> Bool
+    ) async throws {
+      for _ in 0..<attempts {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(10))
+      }
+      Issue.record("Timed out waiting for the SwiftUI Host to settle")
+    }
+  }
+
+  @Suite(
+    "SwiftUI OverlayHost window interaction",
+    .serialized,
+    .enabled(if: runsWindowInteractionTests)
+  )
+  struct OverlayHostWindowInteractionTests {
     @Test("Toast content receives hits while space outside passes through")
     @MainActor func toastHitTestingUsesNonModalBounds() async throws {
       let probe = HitTestingHostProbe(surface: .toast)
