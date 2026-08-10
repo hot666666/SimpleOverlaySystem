@@ -96,7 +96,7 @@ public struct OverlayIdentifier: Hashable, Sendable {
 // MARK: - Dismissal Policy
 
 /// A policy that defines how an overlay can be dismissed.
-public enum DismissPolicy {
+public enum DismissPolicy: Equatable, Sendable {
   /// The overlay can only be dismissed programmatically (e.g., by calling ``OverlayManager/dismiss(id:)``).
   /// It will not react to any user gestures outside of its content.
   case programmatic
@@ -111,7 +111,7 @@ public enum DismissPolicy {
 ///
 /// - ``blockAll`` blocks interaction with underlying content (modal/sheet behavior).
 /// - ``passthrough`` shows a scrim but lets touches pass (HUD/hint behavior).
-public enum OverlayInteractionBarrier {
+public enum OverlayInteractionBarrier: Equatable, Sendable {
   /// Prevents touches from reaching content underneath the overlay.
   case blockAll
   /// Allows touches to pass through the overlay.
@@ -122,11 +122,11 @@ public enum OverlayInteractionBarrier {
 
 /// Defines how an anchored overlay aligns relative to its source (anchor) view.
 ///
-/// Used with ``OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``
+/// Used with ``OverlayManager/presentAnchored(id:anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``
 /// to specify vertical placement, horizontal alignment, and `spacing` from the anchor.
-public enum OverlayPlacement: Equatable {
+public enum OverlayPlacement: Equatable, Sendable {
   /// Horizontal alignment options.
-  public enum HorizontalAlignment: Equatable {
+  public enum HorizontalAlignment: Equatable, Sendable {
     /// Align to the anchor’s leading edge.
     case leading
     /// Align to the anchor’s center.
@@ -149,15 +149,123 @@ public enum OverlayPlacement: Equatable {
   case bottom(spacing: CGFloat = 0, alignment: HorizontalAlignment = .center)
 }
 
+// MARK: - Semantic Surface Placement
+
+/// A semantic container edge used by transient overlay surfaces.
+///
+/// `leading` and `trailing` follow the current SwiftUI layout direction.
+public enum OverlayEdge: Hashable, Sendable {
+  /// The safe-area-relative top edge.
+  case top
+  /// The safe-area-relative bottom edge.
+  case bottom
+  /// The logical leading edge, which follows layout direction.
+  case leading
+  /// The logical trailing edge, which follows layout direction.
+  case trailing
+}
+
+/// Alignment along the edge that owns a transient overlay surface.
+///
+/// For top and bottom edges, `start` and `end` follow the current layout
+/// direction. For leading and trailing edges they map to top and bottom.
+public enum EdgeAlignment: Hashable, Sendable {
+  /// The logical start of the owning edge.
+  case start
+  /// The center of the owning edge.
+  case center
+  /// The logical end of the owning edge.
+  case end
+}
+
+/// Lifetime of a toast presentation.
+public enum ToastDuration: Equatable, Sendable {
+  /// Uses the library default of three seconds.
+  case automatic
+  /// Dismisses after the supplied number of seconds. Negative values behave
+  /// as zero seconds.
+  case seconds(TimeInterval)
+  /// Remains visible until explicitly dismissed.
+  case persistent
+
+  var timeInterval: TimeInterval? {
+    switch self {
+    case .automatic:
+      return 3
+    case .seconds(let seconds):
+      return max(0, seconds)
+    case .persistent:
+      return nil
+    }
+  }
+}
+
+/// Edges supported by an interactive drawer.
+///
+/// A top drawer is intentionally not part of the contract. It can be added
+/// source-compatibly if a concrete consumer requires it later.
+public enum DrawerEdge: Hashable, Sendable {
+  /// The logical leading edge, which follows layout direction.
+  case leading
+  /// The logical trailing edge, which follows layout direction.
+  case trailing
+  /// The safe-area-relative bottom edge.
+  case bottom
+}
+
+/// The drawer's size on the axis perpendicular to its presentation edge.
+///
+/// For leading and trailing drawers this is the width. For a bottom drawer it
+/// is the height.
+public enum DrawerExtent: Equatable, Sendable {
+  /// Uses the content's ideal width or height, capped at `max` and the host's
+  /// available extent.
+  case content(max: CGFloat)
+  /// Uses a fixed point width or height, clamped to the host's available extent.
+  case fixed(CGFloat)
+  /// Uses a fraction of the host's available width or height. Values outside
+  /// `0 ... 1` are clamped.
+  case fraction(CGFloat)
+
+  /// A conventional inspector extent capped at 360 points.
+  public static var inspector: Self { .content(max: 360) }
+}
+
+/// A semantic overlay surface whose interaction policy is owned by the host.
+///
+/// Callers choose the product meaning and placement. The host derives focus,
+/// backdrop, hit-testing, transition, and accessibility behavior.
+public enum OverlaySurface: Equatable, Sendable {
+  /// A non-modal notification that stacks inward from a container edge.
+  ///
+  /// Toast content can receive interaction without installing a backdrop or
+  /// capturing focus. Capacity and spacing come from ``OverlayConfiguration``.
+  case toast(
+    edge: OverlayEdge,
+    alignment: EdgeAlignment = .end,
+    duration: ToastDuration = .automatic
+  )
+
+  /// An interactive modal surface that slides in from a supported edge.
+  ///
+  /// The host owns its backdrop, input barrier, focus, Escape handling,
+  /// accessibility dismissal, transition, and safe-area-constrained layout.
+  case drawer(
+    edge: DrawerEdge,
+    extent: DrawerExtent = .inspector
+  )
+}
+
 // MARK: - Overlay Presentation
 
 /// Internal presentation styles used by the manager.
 ///
 /// Indirectly configured through the public APIs: ``OverlayManager/presentCentered`` and
-/// ``OverlayManager/presentAnchored(anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``.
+/// ``OverlayManager/presentAnchored(id:anchorFrame:placement:dismissPolicy:barrier:backdropOpacity:content:)``.
 enum OverlayPresentation: Equatable {
   case centered(offset: CGPoint = .zero)
   case anchored(placement: OverlayPlacement)
+  case surface(OverlaySurface)
 }
 
 // MARK: - Overlay Item
@@ -174,8 +282,24 @@ struct OverlayItem: Identifiable {
   let barrier: OverlayInteractionBarrier
   let backdropOpacity: Double
   let content: () -> AnyView
+  let onDismiss: (@MainActor () -> Void)?
   var anchorFrame: CGRect?
   var size: CGSize?
+
+  var surface: OverlaySurface? {
+    guard case .surface(let surface) = presentation else { return nil }
+    return surface
+  }
+
+  var isToast: Bool {
+    guard case .toast = surface else { return false }
+    return true
+  }
+
+  var isDrawer: Bool {
+    guard case .drawer = surface else { return false }
+    return true
+  }
 }
 
 // MARK: - Preference Key
@@ -187,7 +311,7 @@ struct OverlayItem: Identifiable {
 /// Equality is based solely on the identifier, not the closure itself.
 struct DismissHandler: Equatable, Sendable {
   let id: UUID
-  let action: @Sendable () -> Void
+  let action: @MainActor @Sendable () -> Void
 
   static func == (lhs: DismissHandler, rhs: DismissHandler) -> Bool {
     lhs.id == rhs.id

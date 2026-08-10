@@ -17,14 +17,15 @@ public extension View {
   /// validate state, or perform cleanup before dismissing an overlay.
   ///
   /// ## Overview
-  /// When applied within an overlay view, this modifier overrides the default tap-to-dismiss behavior
-  /// specified by ``DismissPolicy/tap``. The custom handler is invoked instead of the default dismissal,
-  /// giving you full control over the dismissal flow.
+  /// When applied within an overlay view, this modifier overrides the default
+  /// backdrop action. The overlay must use ``OverlayInteractionBarrier/blockAll``
+  /// so the backdrop can receive the tap. The custom handler takes precedence
+  /// over the overlay's static ``DismissPolicy``.
   ///
   /// ## Usage
   /// ```swift
   /// struct MyOverlay: View {
-  ///     @Environment(\.overlayManager) var manager
+  ///     @Environment(\.dismissOverlay) private var dismissOverlay
   ///     @State private var hasUnsavedChanges = false
   ///
   ///     var body: some View {
@@ -34,11 +35,9 @@ public extension View {
   ///         .onTapBackground {
   ///             if hasUnsavedChanges {
   ///                 // Show confirmation dialog
-  ///                 manager?.presentCentered {
-  ///                     Text("Discard changes?")
-  ///                 }
+  ///                 // Present app-specific confirmation UI.
   ///             } else {
-  ///                 manager?.dismissTop()
+  ///                 dismissOverlay()
   ///             }
   ///         }
   ///     }
@@ -48,12 +47,30 @@ public extension View {
   /// - Important: This modifier must be used within a view that is presented as an overlay
   ///   via ``OverlayManager``. It has no effect when used outside of an overlay context.
   ///
-  /// - Parameter action: A closure executed when the overlay's background is tapped.
-  ///   This action is only invoked if the overlay's ``DismissPolicy`` is set to ``DismissPolicy/tap``.
+  /// - Parameter action: A closure executed when the blocking backdrop is tapped.
   ///
   /// - Returns: A view that registers a custom background tap handler for overlay dismissal.
-  func onTapBackground(perform action: @escaping @Sendable () -> Void) -> some View {
+  func onTapBackground(
+    perform action: @escaping @MainActor @Sendable () -> Void
+  ) -> some View {
     modifier(OverlayDismissHandlerModifier(action: action))
+  }
+
+  /// Intercepts a user-initiated request to dismiss the current overlay.
+  ///
+  /// Drawers route backdrop taps, Escape, and the accessibility escape action
+  /// through this single callback. When a callback is installed, automatic
+  /// dismissal is suppressed; call ``OverlayDismissAction`` from the
+  /// `dismissOverlay` environment value after validation or confirmation to
+  /// complete the dismissal. The modifier has no effect outside hosted overlay
+  /// content.
+  ///
+  /// - Parameter action: The validation or interception action for a user
+  ///   dismissal request.
+  func onOverlayDismissRequest(
+    perform action: @escaping @MainActor @Sendable () -> Void
+  ) -> some View {
+    modifier(OverlayDismissRequestHandlerModifier(action: action))
   }
 }
 
@@ -68,7 +85,7 @@ public extension View {
 /// multiple overlays are stacked.
 private struct OverlayDismissHandlerModifier: ViewModifier {
   @Environment(\.overlayID) private var overlayID
-  let action: @Sendable () -> Void
+  let action: @MainActor @Sendable () -> Void
 
   func body(content: Content) -> some View {
     content
@@ -82,6 +99,36 @@ private struct OverlayDismissHandlerModifier: ViewModifier {
   ///
   /// Returns a dictionary mapping the current overlay's ID to its dismiss handler.
   /// If no overlay ID is available (e.g., not in an overlay context), returns an empty dictionary.
+  private var preferenceValue: [OverlayID: DismissHandler] {
+    guard let overlayID else { return [:] }
+    return [overlayID: DismissHandler(id: overlayID, action: action)]
+  }
+}
+
+/// A separate preference channel for semantic dismissal requests. The legacy
+/// backdrop-only callback remains source-compatible and keeps its old meaning.
+struct OverlayDismissRequestHandlerPreferenceKey: PreferenceKey {
+  static let defaultValue: [OverlayID: DismissHandler] = [:]
+
+  static func reduce(
+    value: inout [OverlayID: DismissHandler],
+    nextValue: () -> [OverlayID: DismissHandler]
+  ) {
+    value.merge(nextValue()) { _, new in new }
+  }
+}
+
+private struct OverlayDismissRequestHandlerModifier: ViewModifier {
+  @Environment(\.overlayID) private var overlayID
+  let action: @MainActor @Sendable () -> Void
+
+  func body(content: Content) -> some View {
+    content.preference(
+      key: OverlayDismissRequestHandlerPreferenceKey.self,
+      value: preferenceValue
+    )
+  }
+
   private var preferenceValue: [OverlayID: DismissHandler] {
     guard let overlayID else { return [:] }
     return [overlayID: DismissHandler(id: overlayID, action: action)]

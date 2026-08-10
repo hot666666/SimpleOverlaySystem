@@ -1,12 +1,15 @@
 # SimpleOverlaySystem
 
-A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack across your view tree using an Observation-powered `EnvironmentValues` entry and supports both centered overlays and anchored overlays attached to controls.
+A lightweight overlay presenter for SwiftUI. It keeps a consistent overlay stack across your view tree using an Observation-powered `EnvironmentValues` entry and supports centered, anchored, toast, and drawer presentations.
 
 - Platforms: iOS 17+, macOS 14+, Mac Catalyst 17+, tvOS 17+
 
 ## Features
 
 - Centered overlays and anchored overlays (shown above/below a source view)
+- Semantic edge toasts with automatic dismissal and deterministic stacking
+- Leading, trailing, and bottom drawers constrained to the existing host bounds
+- Manager-based and Binding-based presentation APIs backed by one host
 - **Overlay identifier** for controlling duplicate overlays (unique, replacing, auto)
 - Flexible dismissal policies: tap outside or programmatic only
 - Custom background tap handlers via `.onTapBackground` modifier for conditional dismissal
@@ -69,7 +72,7 @@ struct CenterOverlayView: View {
                 // Above the button, horizontally aligned to the leading edge
                 AnchoredOverlayButton(
                     placement: .top(alignment: .leading),
-                    dismissPolicy: .actionOnly,
+                    dismissPolicy: .programmatic,
                     barrier: .blockAll
                 ) {
                     Text("Above")
@@ -80,7 +83,7 @@ struct CenterOverlayView: View {
                 // Below the button, horizontally aligned to the trailing edge
                 AnchoredOverlayButton(
                     placement: .bottom(alignment: .trailing),
-                    dismissPolicy: .actionOnly,
+                    dismissPolicy: .programmatic,
                     barrier: .blockAll
                 ) {
                     Text("Below")
@@ -110,12 +113,110 @@ struct CenterOverlayView: View {
 
 ```swift
 overlay?.presentCentered(
-    dismissPolicy: .tapOutside,   // .tapOutside, .actionOnly, .none
+    dismissPolicy: .tap,          // .tap or .programmatic
     barrier: .blockAll            // .blockAll or .passthrough
 ) {
     MyCenteredOverlay()
 }
 ```
+
+### Toasts
+
+Use the manager when a toast represents an event. The toast itself can contain buttons, while the rest of the host remains interactive.
+
+```swift
+overlay?.present(
+    .toast(
+        edge: .bottom,
+        alignment: .end,
+        duration: .automatic
+    ),
+    id: .replacing("saved")
+) {
+    SavedToast()
+}
+```
+
+- `.automatic` dismisses after three seconds.
+- `.seconds(_:)` supplies a custom lifetime.
+- `.persistent` requires explicit dismissal.
+- The newest toast stays closest to its edge.
+- Each edge shows at most three toasts by default; overflow removes the oldest.
+
+### Drawers
+
+Drawers own their modal interaction policy. The call site does not configure raw barriers, offsets, focus rules, or transitions.
+
+```swift
+overlay?.present(
+    .drawer(edge: .trailing, extent: .inspector),
+    id: .replacing("todo-inspector")
+) {
+    TodoInspector()
+}
+```
+
+`DrawerExtent` describes the axis perpendicular to the edge: width for leading/trailing drawers and height for bottom drawers.
+
+- `.content(max:)`
+- `.fixed(_:)`
+- `.fraction(_:)`
+- `.inspector` (`.content(max: 360)`)
+
+Drawers remain inside `OverlayContainer`; they never resize an `NSWindow` or another platform window.
+
+### Binding-based presentation
+
+Use a Binding when SwiftUI state owns the presentation lifecycle.
+
+```swift
+ContentView()
+    .overlayDrawer(
+        item: $selectedTodo,
+        edge: .trailing,
+        extent: .inspector
+    ) { todo in
+        TodoInspector(todo: todo)
+    }
+```
+
+Available Binding modifiers:
+
+- `.overlayCentered(isPresented:/item:)`
+- `.overlayAnchored(isPresented:/item:placement:)`
+- `.overlayToast(isPresented:/item:edge:)`
+- `.overlayDrawer(isPresented:/item:edge:extent:)`
+
+Changing one non-nil drawer item to another updates content in place without replaying the drawer transition. Changing a toast item restarts its lifetime as a new notification.
+
+### Dismissing from overlay content
+
+Overlay content can dismiss its own presentation without keeping an `OverlayID`.
+
+```swift
+struct InspectorView: View {
+    @Environment(\.dismissOverlay) private var dismissOverlay
+
+    var body: some View {
+        Button("Close") { dismissOverlay() }
+    }
+}
+```
+
+Intercept backdrop, Escape, and accessibility dismissal through one callback:
+
+```swift
+InspectorView()
+    .onOverlayDismissRequest {
+        if hasUnsavedChanges {
+            showDiscardConfirmation = true
+        } else {
+            dismissOverlay()
+        }
+    }
+```
+
+The existing `.onTapBackground` modifier remains available for backdrop-only legacy behavior.
 
 ### Anchored overlays (button-based)
 
@@ -255,13 +356,17 @@ overlay?.dismiss(key: "settings")
 - `@Environment(\.overlayManager)`: Optional environment hook (unwrap before presenting)
 - `presentCentered(id:...)`: Show a centered overlay with optional identifier
 - `presentAnchored(id:...)`: Show an anchored overlay with optional identifier
+- `present(_:id:content:)`: Show a semantic toast or drawer
 - `AnchoredOverlayButton(...)`: Show an overlay anchored to the triggering button
+- `.overlayCentered`, `.overlayAnchored`, `.overlayToast`, `.overlayDrawer`: Binding presentation modifiers
 - `dismissTop()`, `dismiss(id:)`, `dismiss(key:)`, `dismissAll()`: Remove overlays from the stack
+- `@Environment(\.dismissOverlay)`: Dismiss the containing overlay
 - `contains(key:)`: Check if an overlay with the specified key is presented
 - `OverlayIdentifier`: `.auto`, `.unique("key")`, `.replacing("key")`
 - `DismissPolicy`: `.programmatic` or `.tap`
 - `OverlayInteractionBarrier`: `.blockAll`, `.passthrough`
 - `.onTapBackground(perform:)`: Modifier to intercept background taps and provide custom dismissal logic
+- `.onOverlayDismissRequest(perform:)`: Unified drawer dismissal interception
 
 ## License
 

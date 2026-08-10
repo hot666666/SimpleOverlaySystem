@@ -26,8 +26,11 @@ import SwiftUI
 struct OverlayHost: ViewModifier {
   // Optional because the environment entry starts out nil until the container injects.
   @Environment(\.overlayManager) private var manager
+  @Environment(\.layoutDirection) private var layoutDirection
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Map of overlay IDs to their custom dismiss handlers.
   @State private var dismissHandlers: [OverlayID: DismissHandler] = [:]
+  @State private var dismissRequestHandlers: [OverlayID: DismissHandler] = [:]
 
   func body(content: Content) -> some View {
     content
@@ -40,27 +43,46 @@ struct OverlayHost: ViewModifier {
       .onPreferenceChange(OverlayDismissHandlerPreferenceKey.self) { handlers in
         self.dismissHandlers = handlers
       }
+      .onPreferenceChange(OverlayDismissRequestHandlerPreferenceKey.self) { handlers in
+        self.dismissRequestHandlers = handlers
+      }
   }
 
   @ViewBuilder
   private func overlays(proxy: GeometryProxy) -> some View {
     // Render overlays only when the manager has items to avoid extra layout work.
-    if let manager, let lastItem = manager.top {
+    if let manager, !manager.stack.isEmpty {
       let containerFrame = proxy.frame(in: .named(OverlaySpace.name))
+      let topInteractive = manager.stack.last(where: { !$0.isToast })
+      let toastStack = toastLayoutEntries(manager: manager, proxy: proxy)
       ZStack(alignment: .top) {
-        backgroundBarrier(for: lastItem, manager: manager)
+        if let topInteractive {
+          backgroundBarrier(for: topInteractive, manager: manager)
+        }
         ForEach(manager.stack) { item in
-          let isTop = item.id == lastItem.id
+          let isTopInteractive = item.id == topInteractive?.id
           OverlayElement(
             item: item,
             proxy: proxy,
             containerFrame: containerFrame,
-            isTop: isTop
+            isTopInteractive: isTopInteractive,
+            layoutDirection: layoutDirection,
+            configuration: manager.configuration,
+            toastStack: toastStack,
+            onDismissRequest: {
+              handleDismissRequest(for: item, manager: manager, source: .escape)
+            }
           )
           .environment(\.overlayID, item.id)
+          .environment(
+            \.dismissOverlay,
+            OverlayDismissAction { manager.dismiss(id: item.id) }
+          )
+          .transition(transition(for: item))
           .zIndex(zIndex(for: item, manager: manager))
         }
       }
+      .animation(reduceMotion ? .easeOut(duration: 0.12) : .easeOut(duration: 0.22), value: manager.stack.map(\.id))
     } else {
       EmptyView()
     }
@@ -81,7 +103,7 @@ struct OverlayHost: ViewModifier {
         .contentShape(Rectangle())
         .allowsHitTesting(true)
         .onTapGesture {
-          handleTap(for: top, manager: manager)
+          handleDismissRequest(for: top, manager: manager, source: .backdrop)
         }
     case .passthrough:
       Rectangle()
@@ -92,18 +114,24 @@ struct OverlayHost: ViewModifier {
     }
   }
 
-  /// Handles the tap gesture on the background based on the overlay's dismiss policy.
-  private func handleTap(for item: OverlayItem, manager: OverlayManager) {
-    // Check for a custom handler from .onTapBackground
-    if let customHandler = dismissHandlers[item.id] {
-      customHandler.action()
+  /// Routes every user dismissal path through the semantic request handler.
+  private func handleDismissRequest(
+    for item: OverlayItem,
+    manager: OverlayManager,
+    source: DismissRequestSource
+  ) {
+    if let requestHandler = dismissRequestHandlers[item.id] {
+      requestHandler.action()
+      return
+    }
+
+    if source == .backdrop, let legacyHandler = dismissHandlers[item.id] {
+      legacyHandler.action()
       return
     }
 
     switch item.dismissPolicy {
-    // Fallback to the static policy
-    case .tap: manager.dismissTop()
-    // Do nothing if the policy is .programmatic
+    case .tap: manager.dismiss(id: item.id)
     case .programmatic: break
     }
   }
@@ -116,7 +144,62 @@ struct OverlayHost: ViewModifier {
   /// - Returns: A z-index higher than previously added items.
   private func zIndex(for item: OverlayItem, manager: OverlayManager) -> Double {
     guard let index = manager.stack.firstIndex(where: { $0.id == item.id }) else { return 0 }
-    return Double(index + 1)
+    let layer = item.isToast ? 10_000 : 0
+    return Double(layer + index + 1)
+  }
+
+  private func toastLayoutEntries(
+    manager: OverlayManager,
+    proxy: GeometryProxy
+  ) -> [ToastLayoutEntry] {
+    manager.stack.compactMap { item in
+      guard case .toast(let edge, _, _) = item.surface,
+        let intrinsicSize = item.size
+      else { return nil }
+      let renderedSize = OverlayLayout.renderedSize(
+        presentation: item.presentation,
+        containerSize: proxy.size,
+        intrinsicSize: intrinsicSize,
+        safeAreaInsets: proxy.safeAreaInsets,
+        layoutDirection: layoutDirection,
+        configuration: manager.configuration
+      )
+      return ToastLayoutEntry(id: item.id, edge: edge, size: renderedSize)
+    }
+  }
+
+  private func transition(for item: OverlayItem) -> AnyTransition {
+    guard !reduceMotion else { return .opacity }
+    switch item.surface {
+    case .toast(let edge, _, _):
+      return .move(edge: swiftUIEdge(for: edge)).combined(with: .opacity)
+    case .drawer(let edge, _):
+      return .move(edge: swiftUIEdge(for: edge)).combined(with: .opacity)
+    case nil:
+      return .opacity.combined(with: .scale(scale: 0.98))
+    }
+  }
+
+  private func swiftUIEdge(for edge: OverlayEdge) -> Edge {
+    switch edge {
+    case .top: .top
+    case .bottom: .bottom
+    case .leading: .leading
+    case .trailing: .trailing
+    }
+  }
+
+  private func swiftUIEdge(for edge: DrawerEdge) -> Edge {
+    switch edge {
+    case .bottom: .bottom
+    case .leading: .leading
+    case .trailing: .trailing
+    }
+  }
+
+  private enum DismissRequestSource {
+    case backdrop
+    case escape
   }
 }
 
@@ -124,29 +207,66 @@ struct OverlayHost: ViewModifier {
 
 /// Renders a single overlay, reads its measured size, and computes its final position.
 ///
-/// Note: Accessibility and hit-testing are restricted to the top item to keep
-/// focus and interactions correct.
+/// Interactive overlays are restricted to the top modal item, while toast
+/// content remains independently hit-testable in its non-modal lane.
 private struct OverlayElement: View {
   @FocusState private var isFocused: Bool
+  @AccessibilityFocusState private var isAccessibilityFocused: Bool
   let item: OverlayItem
   let proxy: GeometryProxy
   let containerFrame: CGRect
-  let isTop: Bool
+  let isTopInteractive: Bool
+  let layoutDirection: LayoutDirection
+  let configuration: OverlayConfiguration
+  let toastStack: [ToastLayoutEntry]
+  let onDismissRequest: () -> Void
 
   // MARK: - Body
   var body: some View {
-    item.content()
-      .background(OverlaySizeReader(id: item.id))
-      .fixedSize()
-      .position(position)
-      .opacity(isMeasured ? 1 : 0)
-      .accessibilityAddTraits(.isModal)
-      .allowsHitTesting(isTop)
-      .accessibilityHidden(!isTop)
-      .focused($isFocused)
-      .onChange(of: isTop) { _, newValue in
-        if !newValue { isFocused = false }
+    OverlayContentLayout(
+      presentation: item.presentation,
+      containerSize: containerSize,
+      safeAreaInsets: proxy.safeAreaInsets,
+      layoutDirection: layoutDirection,
+      configuration: configuration
+    ) {
+      item.content()
+    }
+    .background(OverlaySizeReader(id: item.id))
+    .modifier(OverlayClippingModifier(isEnabled: item.isDrawer))
+    .position(position)
+    .opacity(isMeasured ? 1 : 0)
+    .accessibilityAddTraits(item.isToast ? [] : .isModal)
+    .allowsHitTesting(item.isToast || isTopInteractive)
+    .accessibilityHidden(!item.isToast && !isTopInteractive)
+    .accessibilityFocused($isAccessibilityFocused)
+    .focusable(item.isDrawer)
+    .focusEffectDisabled()
+    .focused($isFocused)
+    .onAppear {
+      if item.isDrawer, isTopInteractive {
+        isFocused = true
+        isAccessibilityFocused = true
       }
+    }
+    .onChange(of: isTopInteractive) { _, newValue in
+      if newValue, item.isDrawer {
+        isFocused = true
+        isAccessibilityFocused = true
+      } else if !newValue {
+        isFocused = false
+        isAccessibilityFocused = false
+      }
+    }
+    .onKeyPress(.escape) {
+      guard item.isDrawer, isTopInteractive else { return .ignored }
+      onDismissRequest()
+      return .handled
+    }
+    .accessibilityAction(.escape) {
+      guard item.isDrawer, isTopInteractive else { return }
+      onDismissRequest()
+    }
   }
 
   // MARK: - Computed
@@ -160,6 +280,18 @@ private struct OverlayElement: View {
 
   private var isMeasured: Bool { measuredSize != nil }
 
+  private var renderedSize: CGSize {
+    guard let measuredSize else { return .zero }
+    return OverlayLayout.renderedSize(
+      presentation: item.presentation,
+      containerSize: containerSize,
+      intrinsicSize: measuredSize,
+      safeAreaInsets: proxy.safeAreaInsets,
+      layoutDirection: layoutDirection,
+      configuration: configuration
+    )
+  }
+
   /// Anchor rect in container-local coordinates (nil for free-floating overlays).
   private var anchorRect: CGRect? {
     guard case .anchored = item.presentation,
@@ -172,12 +304,75 @@ private struct OverlayElement: View {
   }
 
   private var position: CGPoint {
-    guard let contentSize = measuredSize else { return center }
+    guard isMeasured else { return center }
     return OverlayLayout.position(
+      id: item.id,
       presentation: item.presentation,
       containerSize: containerSize,
-      contentSize: contentSize,
-      anchorRect: anchorRect
+      contentSize: renderedSize,
+      anchorRect: anchorRect,
+      safeAreaInsets: proxy.safeAreaInsets,
+      layoutDirection: layoutDirection,
+      configuration: configuration,
+      toastStack: toastStack
+    )
+  }
+}
+
+/// Drawers are host-constrained surfaces, but legacy and toast content may
+/// intentionally render effects such as shadows beyond their measured bounds.
+private struct OverlayClippingModifier: ViewModifier {
+  let isEnabled: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content.clipped()
+    } else {
+      content
+    }
+  }
+}
+
+// MARK: - OverlayContentLayout
+
+/// Measures intrinsic content, resolves the semantic surface size, then gives
+/// flexible drawer content the final host-constrained proposal.
+private struct OverlayContentLayout: Layout {
+  let presentation: OverlayPresentation
+  let containerSize: CGSize
+  let safeAreaInsets: EdgeInsets
+  let layoutDirection: LayoutDirection
+  let configuration: OverlayConfiguration
+
+  func sizeThatFits(
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) -> CGSize {
+    guard let subview = subviews.first else { return .zero }
+    let intrinsicSize = subview.sizeThatFits(.unspecified)
+    return OverlayLayout.renderedSize(
+      presentation: presentation,
+      containerSize: containerSize,
+      intrinsicSize: intrinsicSize,
+      safeAreaInsets: safeAreaInsets,
+      layoutDirection: layoutDirection,
+      configuration: configuration
+    )
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    guard let subview = subviews.first else { return }
+    subview.place(
+      at: bounds.origin,
+      anchor: .topLeading,
+      proposal: ProposedViewSize(bounds.size)
     )
   }
 }
@@ -205,105 +400,5 @@ private struct OverlaySizeReader: View {
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
-  }
-}
-
-// MARK: - OverlayLayout
-
-/// Pure helper for computing final overlay positions.
-///
-/// Given the presentation style, container/content sizes, and optional anchor
-/// rect, returns the overlay’s center point. Side‑effect free and easy to test.
-private enum OverlayLayout {
-  /// Returns the final center position for an overlay.
-  ///
-  /// - Parameters:
-  ///   - presentation: Centered or anchored placement.
-  ///   - containerSize: Size of the container view.
-  ///   - contentSize: Rendered size of the overlay content.
-  ///   - anchorRect: Anchor rect when anchored, otherwise `nil`.
-  /// - Returns: The center point in the container’s coordinate space.
-  static func position(
-    presentation: OverlayPresentation,
-    containerSize: CGSize,
-    contentSize: CGSize,
-    anchorRect: CGRect?
-  ) -> CGPoint {
-    switch presentation {
-    case .centered(let offset):
-      return CGPoint(
-        x: containerSize.width / 2 + offset.x,
-        y: containerSize.height / 2 + offset.y
-      )
-    case .anchored(let placement):
-      guard let anchorRect else {
-        return CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
-      }
-      return anchoredPosition(
-        placement: placement,
-        anchorRect: anchorRect,
-        containerSize: containerSize,
-        contentSize: contentSize
-      )
-    }
-  }
-
-  /// Computes the center for anchored overlays, respecting spacing and bounds.
-  private static func anchoredPosition(
-    placement: OverlayPlacement,
-    anchorRect: CGRect,
-    containerSize: CGSize,
-    contentSize: CGSize
-  ) -> CGPoint {
-    switch placement {
-    case .top(let spacing, let alignment):
-      let x = horizontalCoordinate(
-        for: alignment,
-        anchorRect: anchorRect,
-        contentSize: contentSize,
-        containerWidth: containerSize.width
-      )
-      let y = anchorRect.minY - spacing - contentSize.height / 2
-      return CGPoint(
-        x: clamp(
-          x, min: contentSize.width / 2, max: containerSize.width - contentSize.width / 2),
-        y: max(contentSize.height / 2, y)
-      )
-    case .bottom(let spacing, let alignment):
-      let x = horizontalCoordinate(
-        for: alignment,
-        anchorRect: anchorRect,
-        contentSize: contentSize,
-        containerWidth: containerSize.width
-      )
-      let y = anchorRect.maxY + spacing + contentSize.height / 2
-      return CGPoint(
-        x: clamp(
-          x, min: contentSize.width / 2, max: containerSize.width - contentSize.width / 2),
-        y: min(containerSize.height - contentSize.height / 2, y)
-      )
-    }
-  }
-
-  /// Keeps the overlay horizontally aligned relative to the anchor.
-  private static func horizontalCoordinate(
-    for alignment: OverlayPlacement.HorizontalAlignment,
-    anchorRect: CGRect,
-    contentSize: CGSize,
-    containerWidth: CGFloat
-  ) -> CGFloat {
-    switch alignment {
-    case .leading:
-      return anchorRect.minX + contentSize.width / 2
-    case .center:
-      return anchorRect.midX
-    case .trailing:
-      return anchorRect.maxX - contentSize.width / 2
-    }
-  }
-
-  private static func clamp(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
-    guard min < max else { return value }
-    return Swift.min(Swift.max(value, min), max)
   }
 }
